@@ -52,6 +52,12 @@ class Evaluator(pl.LightningModule):
     self.auc_train = torchmetrics.AUROC(task=task, num_classes=self.hparams.num_classes)
     self.auc_val = torchmetrics.AUROC(task=task, num_classes=self.hparams.num_classes)
     self.auc_test = torchmetrics.AUROC(task=task, num_classes=self.hparams.num_classes)
+    
+    # <--- 新增 F1 Score ---
+    self.f1_train = torchmetrics.F1Score(task=task, num_classes=self.hparams.num_classes, average='macro')
+    self.f1_val = torchmetrics.F1Score(task=task, num_classes=self.hparams.num_classes, average='macro')
+    self.f1_test = torchmetrics.F1Score(task=task, num_classes=self.hparams.num_classes, average='macro')
+    # <--- 新增结束 ---
 
     self.criterion = torch.nn.CrossEntropyLoss()
     
@@ -84,6 +90,7 @@ class Evaluator(pl.LightningModule):
 
     self.acc_test(y_hat, y)
     self.auc_test(y_hat, y)
+    self.f1_test(y_hat, y) # <--- 新增
 
   def test_epoch_end(self, _) -> None:
     """
@@ -91,9 +98,11 @@ class Evaluator(pl.LightningModule):
     """
     test_acc = self.acc_test.compute()
     test_auc = self.auc_test.compute()
+    test_f1 = self.f1_test.compute() # <--- 新增
 
     self.log('test.acc', test_acc)
     self.log('test.auc', test_auc)
+    self.log('test.f1', test_f1) # <--- 新增
 
   def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], _) -> torch.Tensor:
     """
@@ -110,6 +119,7 @@ class Evaluator(pl.LightningModule):
 
     self.acc_train(y_hat, y)
     self.auc_train(y_hat, y)
+    self.f1_train(y_hat, y) # <--- 新增
 
     self.log('eval.train.loss', loss, on_epoch=True, on_step=False)
 
@@ -121,6 +131,7 @@ class Evaluator(pl.LightningModule):
     """
     self.log('eval.train.acc', self.acc_train, on_epoch=True, on_step=False, metric_attribute=self.acc_train)
     self.log('eval.train.auc', self.auc_train, on_epoch=True, on_step=False, metric_attribute=self.auc_train)
+    self.log('eval.train.f1', self.f1_train, on_epoch=True, on_step=False, metric_attribute=self.f1_train) # <--- 新增
 
   def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], _) -> torch.Tensor:
     """
@@ -137,6 +148,7 @@ class Evaluator(pl.LightningModule):
 
     self.acc_val(y_hat, y)
     self.auc_val(y_hat, y)
+    self.f1_val(y_hat, y) # <--- 新增
     
     self.log('eval.val.loss', loss, on_epoch=True, on_step=False)
 
@@ -150,9 +162,11 @@ class Evaluator(pl.LightningModule):
 
     epoch_acc_val = self.acc_val.compute()
     epoch_auc_val = self.auc_val.compute()
+    epoch_f1_val = self.f1_val.compute() # <--- 新增
 
     self.log('eval.val.acc', epoch_acc_val, on_epoch=True, on_step=False, metric_attribute=self.acc_val)
     self.log('eval.val.auc', epoch_auc_val, on_epoch=True, on_step=False, metric_attribute=self.auc_val)
+    self.log('eval.val.f1', epoch_f1_val, on_epoch=True, on_step=False, metric_attribute=self.f1_val) # <--- 新增
   
     if self.hparams.target == 'dvm':
       self.best_val_score = max(self.best_val_score, epoch_acc_val)
@@ -161,6 +175,7 @@ class Evaluator(pl.LightningModule):
 
     self.acc_val.reset()
     self.auc_val.reset()
+    self.f1_val.reset() # <--- 新增
 
   def configure_optimizers(self):
     """
@@ -170,7 +185,9 @@ class Evaluator(pl.LightningModule):
     """
     optimizer = torch.optim.Adam(self.model.parameters(), lr=self.hparams.lr_eval, weight_decay=self.hparams.weight_decay_eval)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=int(10/self.hparams.check_val_every_n_epoch), min_lr=self.hparams.lr*0.0001)
-    return optimizer
+    # 你的原始代码在这里有一个 return optimizer，这会导致下面的 return 语句永远不会执行。
+    # 我假设你想要的是下面带有 scheduler 的 return 语句，所以我注释掉了多余的 return。
+    # return optimizer 
     
     return (
       {

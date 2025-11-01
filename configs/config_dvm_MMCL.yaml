@@ -1,10 +1,10 @@
 defaults:
   - _self_
   - models: resnet50
-  - dataset: dvm_all_server_reordered
+  - dataset: dvm_all_server
 
 # Command Center
-pretrain: False
+pretrain: True
 run_eval: True
 comment: None
 
@@ -24,8 +24,8 @@ lr_finder_lrs:
 multitarget:
 
 wandb_entity: siyiwind
-data_base: /vol/biomedic3/sd1523/data/mm/DVM/features
-num_workers: 10
+data_base: /mnt/hdd/jiazy/DVM-Car/features
+num_workers: 1
 
 algorithm_name: MMCL
 strategy: comparison

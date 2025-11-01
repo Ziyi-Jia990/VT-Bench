@@ -1,0 +1,3 @@
+- exp_name=pretrain_2024
+- use_wandb=false
+- seed=2024

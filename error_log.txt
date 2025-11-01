@@ -1,0 +1,49 @@
+Global seed set to 2022
+Global seed set to 2022
+GPU available: True, used: True
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+`Trainer(limit_train_batches=1.0)` was configured so 100% of the batches per epoch will be used..
+`Trainer(limit_val_batches=1.0)` was configured so 100% of the batches will be used..
+/home/debian/miniconda/envs/tip/lib/python3.9/site-packages/pytorch_lightning/trainer/configuration_validator.py:364: LightningDeprecationWarning: `SSLOnlineEvaluator.on_load_checkpoint` will change its signature and behavior in v1.8. If you wish to load the state of the callback, use `load_state_dict` instead. In v1.8 `on_load_checkpoint(..., checkpoint)` will receive the entire loaded checkpoint dictionary instead of callback state.
+  rank_zero_deprecation(
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+
+   | Name                 | Type                         | Params
+-----------------------------------------------------------------------
+0  | encoder_imaging      | ResNet                       | 23.5 M
+1  | projector_imaging    | SimCLRProjectionHead         | 4.5 M 
+2  | encoder_tabular      | TabularTransformerEncoder    | 12.6 M
+3  | projector_tabular    | SimCLRProjectionHead         | 328 K 
+4  | encoder_multimodal   | MultimodalTransformerEncoder | 17.9 M
+5  | predictor_tabular    | TabularPredictor             | 26.2 K
+6  | itm_head             | Linear                       | 1.0 K 
+7  | criterion_val_itc    | CLIPLoss                     | 0     
+8  | criterion_tr         | ReconstructionLoss           | 0     
+9  | criterion_itm        | CrossEntropyLoss             | 0     
+10 | top1_acc_train       | MulticlassAccuracy           | 0     
+11 | top1_acc_val         | MulticlassAccuracy           | 0     
+12 | top5_acc_train       | MulticlassAccuracy           | 0     
+13 | top5_acc_val         | MulticlassAccuracy           | 0     
+14 | top1_acc_train_cat   | MulticlassAccuracy           | 0     
+15 | top5_acc_train_cat   | MulticlassAccuracy           | 0     
+16 | top1_acc_val_cat     | MulticlassAccuracy           | 0     
+17 | top5_acc_val_cat     | MulticlassAccuracy           | 0     
+18 | auc_train_cat        | MulticlassAUROC              | 0     
+19 | auc_val_cal          | MulticlassAUROC              | 0     
+20 | acc_train_itm        | BinaryAccuracy               | 0     
+21 | acc_val_itm          | BinaryAccuracy               | 0     
+22 | classifier_acc_train | MulticlassAccuracy           | 0     
+23 | classifier_acc_val   | MulticlassAccuracy           | 0     
+24 | classifier_auc_train | MulticlassAUROC              | 0     
+25 | classifier_auc_val   | MulticlassAUROC              | 0     
+-----------------------------------------------------------------------
+58.8 M    Trainable params
+0         Non-trainable params
+58.8 M    Total params
+235.282   Total estimated model params size (MB)
+/home/debian/miniconda/envs/tip/lib/python3.9/site-packages/torchmetrics/utilities/prints.py:36: UserWarning: No positive samples in targets, true positive value should be meaningless. Returning zero tensor in true positive score
+  warnings.warn(*args, **kwargs)
+/home/debian/miniconda/envs/tip/lib/python3.9/site-packages/pytorch_lightning/trainer/trainer.py:1689: LightningDeprecationWarning: Returning a value from `SSLOnlineEvaluator.on_save_checkpoint` is deprecated in v1.6 and will be removed in v1.8. Please override `Callback.state_dict` to return state to be saved.
+  rank_zero_deprecation(

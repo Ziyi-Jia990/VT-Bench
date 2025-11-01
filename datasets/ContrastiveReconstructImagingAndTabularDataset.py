@@ -13,6 +13,7 @@ from torch.utils.data import Dataset
 import pandas as pd
 from torchvision.transforms import transforms
 from torchvision.io import read_image
+from albumentations.pytorch import ToTensorV2
 import albumentations as A
 import numpy as np
 
@@ -43,7 +44,7 @@ class ContrastiveReconstructImagingAndTabularDataset(Dataset):
       self, 
       data_path_imaging: str, delete_segmentation: bool, augmentation: transforms.Compose, augmentation_rate: float, 
       data_path_tabular: str, corruption_rate: float, replace_random_rate: float, replace_special_rate: float, field_lengths_tabular: str, one_hot_tabular: bool,
-      labels_path: str, img_size: int, live_loading: bool, augmentation_speedup: bool=False) -> None:
+      labels_path: str, img_size: int, live_loading: bool, augmentation_speedup: bool=False, target: str='none') -> None:
             
     # Imaging
     self.data_imaging = torch.load(data_path_imaging)
@@ -52,7 +53,10 @@ class ContrastiveReconstructImagingAndTabularDataset(Dataset):
     self.augmentation_rate = augmentation_rate
     self.live_loading = live_loading
     self.augmentation_speedup = augmentation_speedup
-    self.dataset_name = data_path_tabular.split('/')[-1].split('_')[0]
+    if target=='adoption':
+        self.dataset_name = target
+    else:
+        self.dataset_name = data_path_tabular.split('/')[-1].split('_')[0]
 
     if self.delete_segmentation:
       for im in self.data_imaging:
@@ -71,8 +75,19 @@ class ContrastiveReconstructImagingAndTabularDataset(Dataset):
           A.Lambda(name='convert2tensor', image=convert_to_ts_01)
         ])
         print(f'Using cardiac transform for default transform in ContrastiveReconstructImagingAndTabularDataset')   
+      elif self.dataset_name == 'adoption': # <-- 确保你的文件名解析出来是 'adoption'
+        print(f'Using adoption transform for default transform (Albumentations)')
+        # --- 修改这里 ---
+        self.default_transform = A.Compose([
+            A.Resize(height=img_size, width=img_size),
+            ToTensorV2() # <--- 添加 (您之前的代码里漏了这行)
+        ])
+        # --- 修改结束 ---
+      # ==================================================================
+          
       else:
-        raise print('Only support dvm and cardiac datasets')     
+          # 修正一下这里的报错方式
+          raise ValueError(f'Unsupported dataset: {self.dataset_name}. Only support dvm, cardiac and adoption datasets')  
     else:
       self.default_transform = transforms.Compose([
         transforms.Resize(size=(img_size,img_size)),
@@ -209,6 +224,7 @@ class ContrastiveReconstructImagingAndTabularDataset(Dataset):
     if self.one_hot_tabular:
       tabular_views = [self.one_hot_encode(tv) for tv in tabular_views]
     label = torch.tensor(self.labels[index], dtype=torch.long)
+    # label = self.labels[index].clone().detach().to(torch.long)
     unaugmented_tabular = torch.tensor(self.data_tabular[index], dtype=torch.float)
     return imaging_views, tabular_views, label, unaugmented_image, unaugmented_tabular 
 
@@ -225,3 +241,8 @@ if __name__ == '__main__':
   )
   a = list(range(17))
   x = dataset[3]
+
+# data_path_imaging 这是一个 PyTorch 张量文件，其中存储的是一个字符串列表。列表中的每一个字符串都是指向训练集（train set）中某一张车辆图片的.npy文件的完整文件路径。
+# data_path_tabular 所有样本的完整表格特征
+# labels_path 这是一个 PyTorch 张量文件，里面存储的是一个整数列表。这个列表包含了验证集中每一个样本对应的标签（Label）。
+# field_lengths_tabular 这是一个 PyTorch 张量文件，里面存储的是一个整数列表，这个列表描述了上述表格特征文件中每一列的特征维度。

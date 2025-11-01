@@ -14,6 +14,7 @@ import pandas as pd
 from torchvision.transforms import transforms
 from torchvision.io import read_image
 import albumentations as A
+from albumentations.pytorch import ToTensorV2
 import numpy as np
 import os
 import sys
@@ -63,7 +64,10 @@ class ImagingAndTabularDataset(Dataset):
     self.eval_train_augment_rate = eval_train_augment_rate
     self.live_loading = live_loading
     self.augmentation_speedup = augmentation_speedup
-    self.dataset_name = data_path_tabular.split('/')[-1].split('_')[0]
+    if target=='adoption':
+      self.dataset_name = target
+    else:
+        self.dataset_name = data_path_tabular.split('/')[-1].split('_')[0]
 
     if self.delete_segmentation:
       for im in self.data_imaging:
@@ -84,8 +88,19 @@ class ImagingAndTabularDataset(Dataset):
           A.Lambda(name='convert2tensor', image=convert_to_ts_01)
         ])
         print('Using cardiac transform for default transform in ImagingAndTabularDataset')
+      elif self.dataset_name == 'adoption': # <-- 确保你的文件名解析出来是 'adoption'
+        print(f'Using adoption transform for default transform (Albumentations)')
+        # --- 修改这里 ---
+        self.default_transform = A.Compose([
+            A.Resize(height=img_size, width=img_size),
+            ToTensorV2() # <--- 添加 (您之前的代码里漏了这行)
+        ])
+        # --- 修改结束 ---
+      # ==================================================================
+          
       else:
-        raise print('Only support dvm and cardiac datasets in ImagingAndTabularDataset')
+          # 修正一下这里的报错方式
+          raise ValueError(f'Unsupported dataset: {self.dataset_name}. Only support dvm, cardiac and adoption datasets')  
     else:
       self.default_transform = transforms.Compose([
         transforms.Resize(size=(img_size,img_size)),

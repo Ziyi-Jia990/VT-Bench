@@ -10,17 +10,36 @@ from torchvision import transforms
 import numpy as np
 
 def create_logdir(name: str, resume_training: bool, wandb_logger):
-  basepath = os.path.dirname(os.path.abspath(sys.argv[0]))
-  basepath = os.path.join(os.path.dirname(os.path.dirname(basepath)), 'result')
-  basepath = join(basepath, 'runs', name)
-  # basepath = join(os.path.dirname(os.path.abspath(sys.argv[0])),'runs', name)
-  run_name = wandb_logger.experiment.name
-  logdir = join(basepath,run_name)
-  if os.path.exists(logdir) and not resume_training:
-    raise Exception(f'Run {run_name} already exists. Please delete the folder {logdir} or choose a different run name.')
-  os.makedirs(logdir,exist_ok=True)
-  return logdir
+    """
+    创建一个安全且有权限的日志目录。
+    日志将保存在项目根目录下的 'results' 文件夹中。
+    """
+    # --- 修改部分 开始 ---
+    
+    # 获取此文件(utils.py)所在的目录
+    # __file__ 是一个指向当前文件路径的 Python 内置变量
+    current_file_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # 假设项目根目录是 'utils' 文件夹的上一级目录
+    project_root = os.path.dirname(current_file_dir)
+    
+    # 将所有结果保存在项目根目录下的 "results" 文件夹中
+    # 这样可以避免权限问题，并且让项目文件更有条理
+    basepath = join(project_root, 'results', 'runs', name)
+    
+    # --- 修改部分 结束 ---
 
+    # 后续逻辑保持不变
+    run_name = wandb_logger.name
+    logdir = join(basepath, run_name)
+    
+    if os.path.exists(logdir) and not resume_training:
+        raise Exception(f'Run {run_name} already exists. Please delete the folder {logdir} or choose a different run name.')
+    
+    # exist_ok=True 确保在目录已存在时不会报错，这对于多进程或并发任务是安全的
+    os.makedirs(logdir, exist_ok=True)
+    
+    return logdir
 
 def convert_to_float(x):
   return x.float()

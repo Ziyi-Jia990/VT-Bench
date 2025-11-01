@@ -173,18 +173,30 @@ class Pretraining(pl.LightningModule):
   def calc_and_log_train_cat_embedding_acc(self, logits, labels, mask, modality: str) -> None:
     logits, labels = logits[mask].detach(), labels[mask].detach()
     # print(logits.shape, labels.shape)
-    self.top1_acc_train_cat(logits, labels)
-    self.top5_acc_train_cat(logits, labels)
-    self.auc_train_cat(logits, labels)
+    num_classes = self.top1_acc_train_cat.num_classes # 从 metric 中获取类别总数
+    valid_indices = (labels >= 0) & (labels < num_classes)
+    valid_logits = logits[valid_indices]
+    valid_labels = labels[valid_indices]
+    if valid_labels.numel() == 0:
+      return # 没有有效数据，直接返回
+    self.top1_acc_train_cat(valid_logits, valid_labels)
+    self.top5_acc_train_cat(valid_logits, valid_labels)
+    self.auc_train_cat(valid_logits, valid_labels)
     self.log(f"{modality}.train.categorical.top1", self.top1_acc_train_cat, on_epoch=True, on_step=False)
     self.log(f"{modality}.train.categorical.top5", self.top5_acc_train_cat, on_epoch=True, on_step=False)
     self.log(f"{modality}.train.categorical.auc", self.auc_train_cat, on_epoch=True, on_step=False)
 
   def calc_and_log_val_cat_embedding_acc(self, logits, labels, mask, modality: str) -> None:
     logits, labels = logits[mask].detach(), labels[mask].detach()
-    self.top1_acc_val_cat(logits, labels)
-    self.top5_acc_val_cat(logits, labels)
-    self.auc_val_cal(logits, labels)
+    num_classes = self.top1_acc_val_cat.num_classes
+    valid_indices = (labels >= 0) & (labels < num_classes)
+    valid_logits = logits[valid_indices]
+    valid_labels = labels[valid_indices]
+    if valid_labels.numel() == 0:
+      return # 没有有效数据，直接返回
+    self.top1_acc_val_cat(valid_logits, valid_labels)
+    self.top5_acc_val_cat(valid_logits, valid_labels)
+    self.auc_val_cal(valid_logits, valid_labels)
     self.log(f"{modality}.val.categorical.top1", self.top1_acc_val_cat, on_epoch=True, on_step=False)
     self.log(f"{modality}.val.categorical.top5", self.top5_acc_val_cat, on_epoch=True, on_step=False)
     self.log(f"{modality}.val.categorical.auc", self.auc_val_cal, on_epoch=True, on_step=False)

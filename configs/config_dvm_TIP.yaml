@@ -1,7 +1,7 @@
 defaults:
   - _self_
   - models: resnet50
-  - dataset: dvm_all_server_reordered
+  - dataset: dvm_all_server
 
 comment: None
 
@@ -25,8 +25,8 @@ lr_finder_lrs:
 multitarget:
 
 wandb_entity: siyiwind
-data_base: /vol/biomedic3/sd1523/data/mm/DVM/features
-num_workers: 10
+data_base: /mnt/hdd/jiazy/DVM-Car/features
+num_workers: 3
 
 algorithm_name: TIP
 strategy: tip
@@ -161,7 +161,7 @@ labels_train_short:
 labels_val_short:
 data_train_tabular_short:
 data_val_tabular_short:
-data_train_imaging_short:
+data_train_imaging_short: 
 data_val_imaging_short:
 field_lengths_tabular_short:
 data_train_eval_tabular_short:

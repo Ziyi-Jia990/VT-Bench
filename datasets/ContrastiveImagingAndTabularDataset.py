@@ -77,8 +77,13 @@ class ContrastiveImagingAndTabularDataset(Dataset):
       ])
 
     # Tabular
-    self.data_tabular = self.read_and_parse_csv(data_path_tabular)
-    self.generate_marginal_distributions(data_path_tabular)
+    # self.data_tabular = self.read_and_parse_csv(data_path_tabular)
+    # self.generate_marginal_distributions(data_path_tabular)
+    print("Loading tabular data from CSV...")
+    data_df = pd.read_csv(data_path_tabular, header=None, dtype=np.float32)
+    self.data_tabular = data_df.values 
+    self.generate_marginal_distributions(data_df) 
+    print("Tabular data loaded.")
     self.c = corruption_rate
     self.field_lengths_tabular = torch.load(field_lengths_tabular)
     self.one_hot_tabular = one_hot_tabular
@@ -100,13 +105,13 @@ class ContrastiveImagingAndTabularDataset(Dataset):
         data.append(r2)
     return data
 
-  def generate_marginal_distributions(self, data_path) -> None:
+  def generate_marginal_distributions(self, data_df: pd.DataFrame) -> None:
     """
     Generates empirical marginal distribution by transposing data
     """
     # data = np.array(self.data_tabular)
     # self.marginal_distributions = np.transpose(data)
-    data_df = pd.read_csv(data_path, header=None)
+    # data_df = pd.read_csv(data_path, header=None)
     self.marginal_distributions = data_df.transpose().values.tolist()
 
   def get_input_size(self) -> int:
@@ -117,7 +122,7 @@ class ContrastiveImagingAndTabularDataset(Dataset):
     if self.one_hot_tabular:
       return int(sum(self.field_lengths_tabular))
     else:
-      return len(self.data[0])
+      return len(self.data_tabular[0])
 
   def corrupt(self, subject: List[float]) -> List[float]:
     """
@@ -169,7 +174,13 @@ class ContrastiveImagingAndTabularDataset(Dataset):
 
   def __getitem__(self, index: int) -> Tuple[List[torch.Tensor], List[torch.Tensor], torch.Tensor, torch.Tensor]:
     imaging_views, unaugmented_image = self.generate_imaging_views(index)
-    tabular_views = [torch.tensor(self.data_tabular[index], dtype=torch.float), torch.tensor(self.corrupt(self.data_tabular[index]), dtype=torch.float)]
+    # tabular_views = [torch.tensor(self.data_tabular[index], dtype=torch.float), torch.tensor(self.corrupt(self.data_tabular[index]), dtype=torch.float)]
+    tabular_row_numpy = self.data_tabular[index]
+    tabular_row_list = list(tabular_row_numpy) 
+    tabular_views = [
+        torch.tensor(tabular_row_numpy, dtype=torch.float), # 原始视图 (从 numpy 创建)
+        torch.tensor(self.corrupt(tabular_row_list), dtype=torch.float) # 损坏的视图 (从 list 创建)
+    ]
     if self.one_hot_tabular:
       tabular_views = [self.one_hot_encode(tv) for tv in tabular_views]
     label = torch.tensor(self.labels[index], dtype=torch.long)

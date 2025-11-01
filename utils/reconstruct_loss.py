@@ -39,7 +39,8 @@ class ReconstructionLoss(torch.nn.Module):
 
     # cat loss
     prob_cat = self.softmax(out_cat)
-    onehot_cat = torch.nn.functional.one_hot(target_cat, num_classes=D)
+    target_cat_clamped = target_cat.clamp(min=0)
+    onehot_cat = torch.nn.functional.one_hot(target_cat_clamped, num_classes=D)
     loss_cat = -onehot_cat * torch.log(prob_cat+1e-8)
     loss_cat = loss_cat.sum(dim=1)
     loss_cat = (loss_cat*mask_cat).sum()/mask_cat.sum()   

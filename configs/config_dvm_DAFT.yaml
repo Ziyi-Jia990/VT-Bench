@@ -2,7 +2,7 @@
 defaults:
   - _self_
   - models: resnet50
-  - dataset: dvm_all_server_reordered
+  - dataset: dvm_all_server
 
 comment: None
 
@@ -26,8 +26,8 @@ lr_finder_lrs:
 multitarget:
 
 wandb_entity: siyiwind
-data_base: /vol/biomedic3/sd1523/data/mm/DVM/features
-num_workers: 8
+data_base: /mnt/hdd/jiazy/DVM-Car/features
+num_workers: 4
 
 algorithm_name: DAFT
 strategy: comparison

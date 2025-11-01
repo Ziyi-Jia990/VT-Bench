@@ -11,6 +11,7 @@ import torch
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 import wandb
+from pytorch_lightning.loggers import WandbLogger, CSVLogger
 
 from trainers.pretrain import pretrain
 from trainers.evaluate import evaluate
@@ -55,8 +56,11 @@ def run(args: DictConfig):
     generate_embeddings(args)
     return args
   
-  base_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-  base_dir = os.path.join(os.path.dirname(os.path.dirname(base_dir)), 'result')
+  # base_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+  # base_dir = os.path.join(os.path.dirname(os.path.dirname(base_dir)), 'result')
+
+  project_root = os.path.dirname(os.path.abspath(__file__))
+  base_dir = os.path.join(project_root, 'results')
   
   exp_name = f'{args.exp_name}_{args.target}_{now.strftime("%m%d_%H%M")}'
   if args.use_wandb:
@@ -64,9 +68,21 @@ def run(args: DictConfig):
       wandb_logger = WandbLogger(name=exp_name, project=args.wandb_project, entity=args.wandb_entity, save_dir=base_dir, offline=args.offline, id=args.wandb_id, resume='allow')
     else:
       wandb_logger = WandbLogger(name=exp_name, project=args.wandb_project, entity=args.wandb_entity, save_dir=base_dir, offline=args.offline)
+    args.wandb_id = wandb_logger.version
   else:
-    wandb_logger = WandbLogger(name=exp_name, project='Test', entity=args.wandb_entity, save_dir=base_dir, offline=args.offline)
-  args.wandb_id = wandb_logger.version
+    # === 这是新的、更健壮的解决方案 ===
+    print(f"--- Wandb is DISABLED. Using CSVLogger at {base_dir}/{exp_name} ---")
+    
+    # 使用 CSVLogger 作为备用
+    wandb_logger = CSVLogger(
+        save_dir=base_dir, 
+        name=exp_name
+    )
+    
+    # 确保 wandb_id 为 None
+    args.wandb_id = None
+    # === 解决方案结束 ===
+  # args.wandb_id = wandb_logger.version
 
   if args.checkpoint and not args.resume_training:
     if not args.datatype:
