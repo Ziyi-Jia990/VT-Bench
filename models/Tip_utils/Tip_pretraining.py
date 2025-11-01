@@ -77,6 +77,8 @@ class Pretraining(pl.LightningModule):
     self.top5_acc_val_cat = torchmetrics.Accuracy(task='multiclass', top_k=5, num_classes=n_classes_cat)
     self.auc_train_cat = torchmetrics.AUROC(task='multiclass', num_classes=n_classes_cat)
     self.auc_val_cal = torchmetrics.AUROC(task='multiclass', num_classes=n_classes_cat)
+    self.classifier_f1_train = torchmetrics.F1Score(task=task, num_classes=self.hparams.num_classes, average='macro')
+    self.classifier_f1_val = torchmetrics.F1Score(task=task, num_classes=self.hparams.num_classes, average='macro')
 
     self.acc_train_itm = torchmetrics.Accuracy(task='binary', num_classes=2)
     self.acc_val_itm = torchmetrics.Accuracy(task='binary', num_classes=2)
@@ -223,9 +225,11 @@ class Pretraining(pl.LightningModule):
 
       self.classifier_acc_train(preds, labels)
       self.classifier_auc_train(probs, labels)
+      self.classifier_f1_train(preds, labels)
 
       self.log('classifier.train.accuracy', self.classifier_acc_train, on_epoch=True, on_step=False)
       self.log('classifier.train.auc', self.classifier_auc_train, on_epoch=True, on_step=False)
+      self.log('classifier.train.macro_f1', self.classifier_f1_train, on_epoch=True, on_step=False)
 
   def validation_epoch_end(self, validation_step_outputs: List[torch.Tensor]) -> None:
     """
@@ -242,9 +246,11 @@ class Pretraining(pl.LightningModule):
       
       self.classifier_acc_val(preds, labels)
       self.classifier_auc_val(probs, labels)
+      self.classifier_f1_val(preds, labels)
 
       self.log('classifier.val.accuracy', self.classifier_acc_val, on_epoch=True, on_step=False)
       self.log('classifier.val.auc', self.classifier_auc_val, on_epoch=True, on_step=False)
+      self.log('classifier.val.macro_f1', self.classifier_f1_val, on_epoch=True, on_step=False)
 
 
   def stack_outputs(self, outputs: List[torch.Tensor]) -> torch.Tensor:
