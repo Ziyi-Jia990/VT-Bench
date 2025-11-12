@@ -47,3 +47,12 @@ LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
   warnings.warn(*args, **kwargs)
 /home/debian/miniconda/envs/tip/lib/python3.9/site-packages/pytorch_lightning/trainer/trainer.py:1689: LightningDeprecationWarning: Returning a value from `SSLOnlineEvaluator.on_save_checkpoint` is deprecated in v1.6 and will be removed in v1.8. Please override `Callback.state_dict` to return state to be saved.
   rank_zero_deprecation(
+Error executing job with overrides: ['exp_name=pretrain_TIP', 'use_wandb=false']
+Traceback (most recent call last):
+  File "/home/debian/TIP/run.py", line 133, in control
+    run(args)
+  File "/home/debian/TIP/run.py", line 105, in run
+    args.checkpoint = os.path.join(base_dir, 'runs', args.datatype, wandb_logger.experiment.name, f'checkpoint_last_epoch_{args.max_epochs-1:02}.ckpt')
+AttributeError: 'ExperimentWriter' object has no attribute 'name'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.

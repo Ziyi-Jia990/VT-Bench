@@ -53,15 +53,15 @@ class ContrastiveReconstructImagingAndTabularDataset(Dataset):
     self.augmentation_rate = augmentation_rate
     self.live_loading = live_loading
     self.augmentation_speedup = augmentation_speedup
-    if target=='adoption':
-        self.dataset_name = target
-    else:
-        self.dataset_name = data_path_tabular.split('/')[-1].split('_')[0]
+   
+    self.dataset_name = target
+    # self.dataset_name = data_path_tabular.split('/')[-1].split('_')[0]
 
     if self.delete_segmentation:
       for im in self.data_imaging:
         im[0,:,:] = 0
 
+    print(f"!!!!!!!!!!!!!!!!!!!!!!!!dataset_name: {self.dataset_name} && augmentation_speedup:{augmentation_speedup}!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
     if augmentation_speedup:
       if self.dataset_name == 'dvm':
         self.default_transform = A.Compose([
@@ -83,11 +83,29 @@ class ContrastiveReconstructImagingAndTabularDataset(Dataset):
             ToTensorV2() # <--- 添加 (您之前的代码里漏了这行)
         ])
         # --- 修改结束 ---
-      # ==================================================================
+      elif self.dataset_name == 'celeba':
+          print(f'Using standard (0-255 -> 0-1) transform for CelebA (Albumentations)')
+          self.default_transform = A.Compose([
+              A.Resize(height=img_size, width=img_size),
+              ToTensorV2() # 自动处理 [0, 255] -> [0.0, 1.0] 和 HWC -> CHW
+          ])
+      elif self.dataset_name == 'breast_cancer': # <-- 替换为您数据集的名称
+          print(f'Using Breast Cancer transform (Resize + L-to-RGB + 0-1 Norm)')
           
+          self.default_transform = A.Compose([
+              A.Resize(height=img_size, width=img_size),
+              A.ToRGB(p=1.0),
+              ToTensorV2()
+          ])   
+      elif self.dataset_name == 'skin_cancer': 
+          print(f'Using Skin Cancer transform (Resize + 0-1 Norm)')
+          self.default_transform = A.Compose([
+              A.Resize(height=img_size, width=img_size),
+              ToTensorV2()
+          ])
       else:
           # 修正一下这里的报错方式
-          raise ValueError(f'Unsupported dataset: {self.dataset_name}. Only support dvm, cardiac and adoption datasets')  
+          raise ValueError(f'Unsupported dataset: {self.dataset_name}.')  
     else:
       self.default_transform = transforms.Compose([
         transforms.Resize(size=(img_size,img_size)),
@@ -130,7 +148,8 @@ class ContrastiveReconstructImagingAndTabularDataset(Dataset):
     Generates empirical marginal distribution by transposing data
     """
     # 算法的 'corrupt' 部分需要 list, 所以这里 .tolist() 是必须的
-    self.marginal_distributions = data_df.transpose().values.tolist()
+    # self.marginal_distributions = data_df.transpose().values.tolist()
+    self.marginal_distributions = data_df.transpose().values
 
 
   def get_input_size(self) -> int:
@@ -157,35 +176,55 @@ class ContrastiveReconstructImagingAndTabularDataset(Dataset):
     subject[indices] = self.marginal_distributions[indices, pick_value_positions]
     return subject
   
+# --- 用这个替换你的 Dataset 类中的 mask 函数 ---
   def mask(self, subject: List[float]) -> List[float]:
-    '''
-    Create a copy of a subject, selects
-    some indices keeping the same
-    some indices replacing their values with 
-    '''
     subject = copy.deepcopy(subject)
     subject = np.array(subject)
 
-    indices = random.sample(list(range(len(subject))), round(len(subject)*(self.replace_random_rate + self.replace_special_rate)))
-    num_random = int(len(indices)*self.replace_random_rate/(self.replace_random_rate + self.replace_special_rate))
+    # 1. 找到所有 *可以被 mask* 的有效索引池
+    possible_indices = []
+    for i in range(len(subject)):
+      field_len = self.field_lengths_tabular[i]
+      value = subject[i]
+      if field_len == 1:
+        if not np.isnan(value):
+          possible_indices.append(i)
+      else:
+        if value >= 0 and value < field_len:
+          possible_indices.append(i)
+
+    # 2. 计算要 mask 的总数
+    total_rate = self.replace_random_rate + self.replace_special_rate
+    if total_rate == 0 or len(possible_indices) == 0:
+      indices = []
+      num_random = 0
+    else:
+      num_to_mask = round(len(subject) * total_rate)
+      num_to_mask = min(num_to_mask, len(possible_indices))
+      indices = random.sample(possible_indices, num_to_mask)
+      num_random = int(len(indices) * self.replace_random_rate / total_rate) if total_rate > 0 else 0
+
     num_special = len(indices) - num_random
-    # replace some positions with random sample from marginal distribution
-    pick_value_positions = np.random.choice(self.marginal_distributions.shape[1], size=num_random)
-    subject[indices[:num_random]] = self.marginal_distributions[indices[:num_random], pick_value_positions]
+    
+    if num_random > 0: 
+      pick_value_positions = np.random.choice(self.marginal_distributions.shape[1], size=num_random)
+      subject[indices[:num_random]] = self.marginal_distributions[indices[:num_random], pick_value_positions]
 
     mask, mask_random, mask_special = np.zeros_like(subject, dtype=bool), np.zeros_like(subject, dtype=bool), np.zeros_like(subject, dtype=bool)
-    mask[indices] = True
-    mask_random[indices[:num_random]] = True
-    mask_special[indices[num_random:]] = True
-    assert np.sum(mask) == np.sum(mask_special)
-    # print(mask_special.sum()/sum(subject.shape), mask_random.sum()/sum(subject.shape), mask.sum()/sum(subject.shape))
-    # print('indices to mask: ', indices)
-    # print('pick value positions: ', pick_value_positions)
-    return subject, mask, mask_special, mask_random 
+    
+    if indices: 
+      mask[indices] = True
+      mask_random[indices[:num_random]] = True
+      mask_special[indices[num_random:]] = True
+    
+    assert np.sum(mask) == np.sum(mask_random) + np.sum(mask_special)
+    
+    return subject, mask, mask_special, mask_random
 
   def one_hot_encode(self, subject: torch.Tensor) -> torch.Tensor:
     """
     One-hot encodes a subject's features
+    
     """
     out = []
     for i in range(len(subject)):
@@ -215,6 +254,18 @@ class ContrastiveReconstructImagingAndTabularDataset(Dataset):
 
     orig_im = self.default_transform(image=im)['image'] if self.augmentation_speedup else self.default_transform(im)
     
+    if orig_im.dtype == torch.uint8:
+        # print(f"--- [FIXING orig_im, index {index}] Manually converting uint8 -> float32 ---")
+        orig_im = orig_im.float() / 255.0
+
+    if ims[0].dtype == torch.uint8:
+        # print(f"--- [FIXING ims[0], index {index}] Manually converting uint8 -> float32 ---")
+        ims[0] = ims[0].float() / 255.0
+
+    if ims[1].dtype == torch.uint8:
+        # print(f"--- [FIXING ims[1], index {index}] Manually converting uint8 -> float32 ---")
+        ims[1] = ims[1].float() / 255.0
+
     return ims, orig_im
 
   def __getitem__(self, index: int) -> Tuple[List[torch.Tensor], List[torch.Tensor], torch.Tensor, torch.Tensor]:
@@ -229,8 +280,8 @@ class ContrastiveReconstructImagingAndTabularDataset(Dataset):
     tabular_views = tabular_views + [torch.from_numpy(mask), torch.from_numpy(mask_special)]
     if self.one_hot_tabular:
       tabular_views = [self.one_hot_encode(tv) for tv in tabular_views]
-    label = torch.tensor(self.labels[index], dtype=torch.long)
-    # label = self.labels[index].clone().detach().to(torch.long)
+    # label = torch.tensor(self.labels[index], dtype=torch.long)
+    label = self.labels[index].clone().detach().to(torch.long)
     unaugmented_tabular = torch.tensor(self.data_tabular[index], dtype=torch.float)
     return imaging_views, tabular_views, label, unaugmented_image, unaugmented_tabular 
 

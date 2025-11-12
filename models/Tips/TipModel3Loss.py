@@ -30,6 +30,15 @@ class TIP3Loss(Pretraining):
         
         # Tabular 
         self.initialize_tabular_encoder_and_projector()
+        
+        field_lengths_path = self.hparams.field_lengths_tabular 
+        all_lengths_list = torch.load(field_lengths_path, map_location='cpu')
+        all_lengths = torch.tensor(all_lengths_list)
+        num_con_actual = (all_lengths == 1).sum().item()
+        num_cat_actual = (all_lengths > 1).sum().item()
+
+        self.hparams.num_cat = num_cat_actual
+        self.hparams.num_con = num_con_actual
 
         # Multimodal
         self.initialize_multimodal_encoder_and_predictor()
@@ -41,7 +50,12 @@ class TIP3Loss(Pretraining):
         nclasses = hparams.batch_size
         self.criterion_val_itc = CLIPLoss(temperature=self.hparams.temperature, lambda_0=self.hparams.lambda_0)
         self.criterion_train_itc = self.criterion_val_itc
-        self.criterion_tr = ReconstructionLoss(num_cat=self.hparams.num_cat, cat_offsets=self.encoder_tabular.cat_offsets, num_con=self.hparams.num_con)
+        # self.criterion_tr = ReconstructionLoss(num_cat=self.hparams.num_cat, cat_offsets=self.encoder_tabular.cat_offsets, num_con=self.hparams.num_con)
+        self.criterion_tr = ReconstructionLoss(
+            num_cat=num_cat_actual, 
+            cat_offsets=self.encoder_tabular.cat_offsets, 
+            num_con=num_con_actual   
+        )
         self.criterion_itm = nn.CrossEntropyLoss(reduction='mean')
         
         self.initialize_classifier_and_metrics(nclasses, nclasses)

@@ -49,6 +49,8 @@ class TIPBackbone(nn.Module):
       # load tabular encoder
       self.create_tabular_model(original_args)
       self.encoder_name_tabular = 'encoder_tabular.'
+      print(f"DEBUG: len(self.cat_lengths_tabular) = {len(self.cat_lengths_tabular)}")
+      print(f"DEBUG: original_args.num_cat = {original_args.num_cat}")
       assert len(self.cat_lengths_tabular) == original_args.num_cat
       assert len(self.con_lengths_tabular) == original_args.num_con
       # load multimodal encoder

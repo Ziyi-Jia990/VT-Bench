@@ -2,6 +2,7 @@ from typing import List, Tuple
 import random
 import csv
 import copy
+import numpy as np
 
 import torch
 from torch.utils.data import Dataset
@@ -9,8 +10,7 @@ import pandas as pd
 from torchvision.transforms import transforms
 from torchvision.io import read_image
 import albumentations as A
-import numpy as np
-
+from albumentations.pytorch import ToTensorV2
 
 def convert_to_float(x):
   return x.float()
@@ -39,7 +39,7 @@ class ContrastiveImagingAndTabularDataset(Dataset):
       self, 
       data_path_imaging: str, delete_segmentation: bool, augmentation: transforms.Compose, augmentation_rate: float, 
       data_path_tabular: str, corruption_rate: float, field_lengths_tabular: str, one_hot_tabular: bool,
-      labels_path: str, img_size: int, live_loading: bool, augmentation_speedup: bool=False) -> None:
+      labels_path: str, img_size: int, live_loading: bool, augmentation_speedup: bool=False, target: str='none') -> None:
             
     # Imaging
     self.data_imaging = torch.load(data_path_imaging)
@@ -48,7 +48,8 @@ class ContrastiveImagingAndTabularDataset(Dataset):
     self.augmentation_rate = augmentation_rate
     self.live_loading = live_loading
     self.augmentation_speedup = augmentation_speedup
-    self.dataset_name = data_path_tabular.split('/')[-1].split('_')[0]
+    # self.dataset_name = data_path_tabular.split('/')[-1].split('_')[0]
+    self.dataset_name = target
 
     if self.delete_segmentation:
       for im in self.data_imaging:
@@ -67,8 +68,37 @@ class ContrastiveImagingAndTabularDataset(Dataset):
           A.Lambda(name='convert2tensor', image=convert_to_ts_01)
         ])
         print(f'Using cardiac transform for default transform in ContrastiveImagingAndTabularDataset')
+      elif self.dataset_name == 'adoption': # <-- 确保你的文件名解析出来是 'adoption'
+        print(f'Using adoption transform for default transform (Albumentations)')
+        # --- 修改这里 ---
+        self.default_transform = A.Compose([
+            A.Resize(height=img_size, width=img_size),
+            ToTensorV2() # <--- 添加 (您之前的代码里漏了这行)
+        ])
+        # --- 修改结束 ---
+      elif self.dataset_name == 'celeba':
+          print(f'Using standard (0-255 -> 0-1) transform for CelebA (Albumentations)')
+          self.default_transform = A.Compose([
+              A.Resize(height=img_size, width=img_size),
+              ToTensorV2() # 自动处理 [0, 255] -> [0.0, 1.0] 和 HWC -> CHW
+          ])
+      elif self.dataset_name == 'breast_cancer': # <-- 替换为您数据集的名称
+          print(f'Using Breast Cancer transform (Resize + L-to-RGB + 0-1 Norm)')
+          
+          self.default_transform = A.Compose([
+              A.Resize(height=img_size, width=img_size),
+              A.ToRGB(p=1.0),
+              ToTensorV2()
+          ])   
+      elif self.dataset_name == 'skin_cancer': 
+          print(f'Using Skin Cancer transform (Resize + 0-1 Norm)')
+          self.default_transform = A.Compose([
+              A.Resize(height=img_size, width=img_size),
+              ToTensorV2()
+          ])
       else:
-        raise print('Only support dvm and cardiac datasets')
+          # 修正一下这里的报错方式
+          raise ValueError(f'Unsupported dataset: {self.dataset_name}.')  
     else:
       self.default_transform = transforms.Compose([
         transforms.Resize(size=(img_size,img_size)),

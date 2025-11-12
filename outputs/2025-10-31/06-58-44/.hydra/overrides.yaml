@@ -1,5 +1,0 @@
-- exp_name=finetune
-- pretrain=False
-- evaluate=True
-- checkpoint=/home/debian/TIP/results/runs/multimodal/pretrain_2022_dvm_1030_1216/checkpoint_last_epoch_499.ckpt
-- use_wandb=false

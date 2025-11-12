@@ -15,6 +15,7 @@ from torchvision.transforms import transforms
 from torchvision.io import read_image
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+from albumentations import Normalize # <--- 确保有这一行
 import numpy as np
 import os
 import sys
@@ -64,10 +65,8 @@ class ImagingAndTabularDataset(Dataset):
     self.eval_train_augment_rate = eval_train_augment_rate
     self.live_loading = live_loading
     self.augmentation_speedup = augmentation_speedup
-    if target=='adoption':
-      self.dataset_name = target
-    else:
-        self.dataset_name = data_path_tabular.split('/')[-1].split('_')[0]
+    self.dataset_name = target
+    # self.dataset_name = data_path_tabular.split('/')[-1].split('_')[0]
 
     if self.delete_segmentation:
       for im in self.data_imaging:
@@ -96,11 +95,33 @@ class ImagingAndTabularDataset(Dataset):
             ToTensorV2() # <--- 添加 (您之前的代码里漏了这行)
         ])
         # --- 修改结束 ---
-      # ==================================================================
+      elif self.dataset_name == 'celeba':
+          print(f'Using standard (0-255 -> 0-1) transform for CelebA (Albumentations)')
+          self.default_transform = A.Compose([
+              A.Resize(height=img_size, width=img_size),
+              ToTensorV2() # 自动处理 [0, 255] -> [0.0, 1.0] 和 HWC -> CHW
+          ])
+      elif self.dataset_name == 'breast_cancer': # <-- 替换为您数据集的名称
+          print(f'Using Breast Cancer transform (Resize + L-to-RGB + NORMALIZE + ToTensor)')
           
+          self.default_transform = A.Compose([
+              A.Resize(height=img_size, width=img_size),
+              A.ToRGB(p=1.0),
+              # --- [修复] 添加下面这一行 ---
+              # A.Normalize 会自动将 uint8 [0, 255] 转为 float32 并除以 255.0
+              A.Normalize(mean=[0.0, 0.0, 0.0], std=[1.0, 1.0, 1.0], max_pixel_value=255.0),
+              # --- 修复结束 ---
+              ToTensorV2()
+          ])
+      elif self.dataset_name == 'skin_cancer': 
+          print(f'Using Skin Cancer transform (Resize + 0-1 Norm)')
+          self.default_transform = A.Compose([
+              A.Resize(height=img_size, width=img_size),
+              ToTensorV2()
+          ])
       else:
           # 修正一下这里的报错方式
-          raise ValueError(f'Unsupported dataset: {self.dataset_name}. Only support dvm, cardiac and adoption datasets')  
+          raise ValueError(f'Unsupported dataset: {self.dataset_name}.')  
     else:
       self.default_transform = transforms.Compose([
         transforms.Resize(size=(img_size,img_size)),
@@ -133,6 +154,7 @@ class ImagingAndTabularDataset(Dataset):
     self.labels = torch.load(labels_path)
 
     self.train = train
+    print("self.train:",self.train)
     assert len(self.data_imaging) == len(self.data_tabular) == len(self.labels) 
   
   def read_and_parse_csv(self, path_tabular: str) -> List[List[float]]:
