@@ -12,20 +12,32 @@ from collections import OrderedDict
 from sklearn.metrics import accuracy_score, f1_score
 import pytorch_lightning as pl
 
-# --- 导入您的模型和 Dataset ---
-from datasets.ImagingAndTabularDataset import ImagingAndTabularDataset
-from models.Tip_utils.pieces import DotDict
-from models.Evaluator import Evaluator
-from models.MultimodalModel import MultimodalModel
-from models.Tip_utils.Tip_downstream import TIPBackbone
-from models.Tip_utils.Tip_downstream_ensemble import TIPBackboneEnsemble
-from models.DAFT import DAFT
-
+# -------------------------------------------------------------------
+# [占位符] 导入您的模型类
+# (此模块假设这些导入在您的环境中是有效的)
+# -------------------------------------------------------------------
+try:
+    from models.evaluator import Evaluator
+    from models.Tip_utils.Tip_downstream import TIPBackbone
+    from models.Tip_utils.Tip_downstream_ensemble import TIPBackboneEnsemble
+    from models.DAFT import DAFT
+    from models.MultimodalModel import MultimodalModel
+    from data.ImagingAndTabularDataset import ImagingAndTabularDataset
+except ImportError as e:
+    print(f"警告：导入模型类时出错: {e}")
+    print("请确保 model_analyzer.py 可以访问您的模型和数据集定义。")
+    # 为了脚本能被解析，定义空的占位符类
+    class Evaluator(pl.LightningModule): pass
+    class TIPBackbone(nn.Module): pass
+    class TIPBackboneEnsemble(nn.Module): pass
+    class DAFT(nn.Module): pass
+    class MultimodalModel(nn.Module): pass
+    class ImagingAndTabularDataset: pass
 
 # =========================================================================
 #
-# PART 2: 模型适配器 (Model Adapter)
-# (这是解决 API 不同问题的关键)
+# PART 1: 模型适配器 (Model Adapter)
+# (处理所有模型之间不同的 API)
 #
 # =========================================================================
 
@@ -40,8 +52,7 @@ class ModelAdapter:
         self.model_type = None
 
         if hparams.eval_datatype == 'multimodal':
-            # --- [新增] 处理 Ensemble 的逻辑 ---
-            if hparams.finetune_ensemble:
+            if getattr(hparams, 'finetune_ensemble', False): # 安全地检查
                 self.model_type = "TIP_Ensemble"
                 assert isinstance(model, TIPBackboneEnsemble)
                 self.image_encoder = model.encoder_imaging
@@ -68,16 +79,14 @@ class ModelAdapter:
                 self.tabular_encoder = model.tabular_model.encoder
                 self.fusion_classifier_func = self._multimodal_fusion_classifier
             else:
-                # 排除 MUL (不兼容) 和 MultimodalModelTransformer (您保证不会出现)
                 raise ValueError(f"不支持的 algorithm_name: {hparams.algorithm_name}")
         else:
             raise TypeError(f"不支持的 eval_datatype: {hparams.eval_datatype}")
             
-        print(f"ModelAdapter 为模型类型初始化: {self.model_type}")
+        print(f"[ModelAnalyzer] ModelAdapter 为模型类型初始化: {self.model_type}")
 
     def get_image_embedding(self, img_input: torch.Tensor) -> torch.Tensor:
         """返回 z_i (图像嵌入)"""
-        # TIP 和 TIP_Ensemble 共享相同的逻辑
         if self.model_type in ["TIP_Standard", "TIP_Ensemble"]:
             return self.image_encoder(img_input)[-1]
         elif self.model_type == "DAFT":
@@ -87,48 +96,30 @@ class ModelAdapter:
         
     def get_tabular_embedding(self, tab_input: torch.Tensor) -> torch.Tensor:
         """返回 z_t (表格嵌入)"""
-        # TIP, TIP_Ensemble, 和 CONCAT/MAX 共享相同的逻辑
         if self.model_type in ["TIP_Standard", "TIP_Ensemble"]:
             return self.tabular_encoder(tab_input)
         elif self.model_type == "DAFT":
-            return self.tabular_encoder(tab_input) # DAFT's encoder 是 Identity
+            return self.tabular_encoder(tab_input)
         elif self.model_type in ["CONCAT", "MAX"]:
             return self.tabular_encoder(tab_input).squeeze()
 
-    # --- 内部包装器 (用于 IG) ---
-    
     def _tip_fusion_classifier(self, img_embed, tab_embed):
-        """标准 TIP 模型的融合/分类路径"""
         multimodal_features = self.model.encoder_multimodal(
             x=tab_embed, image_features=img_embed
         )
         return self.model.classifier(multimodal_features[:, 0, :])
 
-    # --- [新增] Ensemble 的融合函数 ---
     def _tip_ensemble_fusion_classifier(self, img_embed, tab_embed):
-        """
-        Ensemble 模型的融合/分类路径。
-       
-        """
-        # 1. 多模态路径
         x_m = self.model.encoder_multimodal(x=tab_embed, image_features=img_embed)
         out_m = self.model.classifier_multimodal(x_m[:,0,:])
-        
-        # 2. 纯图像路径
         if self.model.encoder_imaging_type == 'resnet':
             out_i = self.model.classifier_imaging(F.adaptive_avg_pool2d(img_embed, (1, 1)).flatten(1))
         elif self.model.encoder_imaging_type == 'vit':
             out_i = self.model.classifier_imaging(img_embed[:,0,:])
-        
-        # 3. 纯表格路径
         out_t = self.model.classifier_tabular(tab_embed[:,0,:])
-        
-        # 4. 平均
-        x = (out_i + out_t + out_m) / 3.0
-        return x
+        return (out_i + out_t + out_m) / 3.0
 
     def _daft_fusion_classifier(self, img_embed, tab_embed):
-        """DAFT 模型的融合/分类路径"""
         x_fused = self.model.daft(x_im=img_embed, x_tab=tab_embed)
         x_fused = self.model.residual(x_fused)
         x_fused = x_fused + self.model.shortcut(img_embed)
@@ -137,7 +128,6 @@ class ModelAdapter:
         return self.model.head(x_pool)
 
     def _multimodal_fusion_classifier(self, img_embed, tab_embed):
-        """CONCAT/MAX 模型的融合/分类路径"""
         if self.model_type == 'CONCAT':
             x_fused = torch.cat([img_embed, tab_embed], dim=1)
         elif self.model_type == 'MAX':
@@ -146,38 +136,31 @@ class ModelAdapter:
             x_fused, _ = torch.max(x_fused, dim=1)
         return self.model.head(x_fused)
 
-
 # =========================================================================
 #
-# PART 3: 适配器驱动的分析函数
-# (这部分代码无需更改，因为 Adapter 已经处理了所有复杂性)
+# PART 2: 核心分析函数
+# (使用 ModelAdapter，与模型无关)
 #
 # =========================================================================
 
-# --- 3.1: 共享基线函数 (已修正形状错误) ---
 def compute_mean_embeddings(adapter: ModelAdapter, 
                             data_loader: DataLoader, 
                             device: torch.device,
                             baseline_file_path: str):
     """
-    计算数据集的平均嵌入 (z_i, z_t)。
-    如果 'baseline_file_path' 存在，则加载它。
-    否则，计算它并保存。
+    计算或加载平均嵌入基线。
+    [此版本包含您修正后的保存逻辑]
     """
-    
-    # --- [检查文件是否存在] ---
     if os.path.exists(baseline_file_path):
         print(f"--- 正在从文件加载已保存的基线 ---")
         print(f"路径: {baseline_file_path}")
         try:
             baselines = torch.load(baseline_file_path, map_location=device)
             print("基线加载成功。")
-            # 我们假设保存的文件已经是正确的 [1, ...] 形状
             return baselines['img_embed'], baselines['tab_embed']
         except Exception as e:
             print(f"加载基线失败 (文件可能已损坏): {e}")
             print("将重新计算基线...")
-    # ----------------------------
 
     adapter.model.to(device)
     adapter.model.eval()
@@ -195,31 +178,19 @@ def compute_mean_embeddings(adapter: ModelAdapter,
             all_img_embeds.append(img_embed.cpu())
             all_tab_embeds.append(tab_embed.cpu())
             
-            # --- [调试] ---
-            # (与您之前的调试逻辑相同，在少量批次后停止)
-            if i >= 10: # (例如，计算 11 个批次的均值)
-                print("\n--- 调试: 已达到基线计算的批次限制 ---")
-                break 
-                
-    # --- [关键修复在这里] ---
-    
-    # 1. 计算均值 (移除批次维度)
-    mean_img_embed = torch.cat(all_img_embeds, dim=0).mean(dim=0) # 形状变为 [C, H, W]
-    mean_tab_embed = torch.cat(all_tab_embeds, dim=0).mean(dim=0) # 形状变为 [N, D] 或 [D]
-    
-    # 2. 将批次维度 (dim=0) 加回去
-    mean_img_embed = mean_img_embed.unsqueeze(0) # 形状变为 [1, C, H, W]
-    mean_tab_embed = mean_tab_embed.unsqueeze(0) # 形状变为 [1, N, D] 或 [1, D]
-    
+    # --- [关键修复] ---
+    mean_img_embed = torch.cat(all_img_embeds, dim=0).mean(dim=0)
+    mean_tab_embed = torch.cat(all_tab_embeds, dim=0).mean(dim=0)
+    mean_img_embed = mean_img_embed.unsqueeze(0) # 变为 [1, C, H, W]
+    mean_tab_embed = mean_tab_embed.unsqueeze(0) # 变为 [1, ...]
     # -----------------------
-
     print("Mean embeddings calculated.")
 
     try:
         print(f"正在保存新基线到: {baseline_file_path}")
         baselines_to_save = {
-            'img_embed': mean_img_embed.to(device), # (已修正形状)
-            'tab_embed': mean_tab_embed.to(device)  # (已修正形状)
+            'img_embed': mean_img_embed.to(device),
+            'tab_embed': mean_tab_embed.to(device)
         }
         torch.save(baselines_to_save, baseline_file_path)
         print("基线保存成功。")
@@ -241,7 +212,7 @@ def evaluate_model_with_ablation(adapter: ModelAdapter,
     all_labels, all_preds = [], []
     
     with torch.no_grad():
-        for batch in tqdm(data_loader):
+        for i, batch in enumerate(tqdm(data_loader)):
             img_input = batch[0][0].to(device)
             tab_input = batch[0][1].to(device)
             labels = batch[1].to(device)
@@ -252,13 +223,20 @@ def evaluate_model_with_ablation(adapter: ModelAdapter,
             img_embed = adapter.get_image_embedding(img_input)
             tab_embed = adapter.get_tabular_embedding(tab_input)
             
+            # --- [热修复] ---
+            # (我们保留这个热修复，以防加载了旧的 3D 基线)
             if ablate_image:
+                if img_embed_baseline.dim() < img_embed.dim():
+                    img_embed_baseline = img_embed_baseline.unsqueeze(0)
                 img_embed = img_embed_baseline.expand_as(img_embed)
             if ablate_tabular:
                 if adapter.model_type == "DAFT":
                     tab_embed = torch.zeros_like(tab_embed)
                 else:
+                    if tab_embed_baseline.dim() < tab_embed.dim():
+                         tab_embed_baseline = tab_embed_baseline.unsqueeze(0)
                     tab_embed = tab_embed_baseline.expand_as(tab_embed)
+            # --- [修复结束] ---
 
             logits = adapter.fusion_classifier_func(img_embed, tab_embed)
             preds = torch.argmax(logits, dim=1)
@@ -270,8 +248,6 @@ def evaluate_model_with_ablation(adapter: ModelAdapter,
     accuracy = accuracy_score(all_labels, all_preds)
     f1_macro = f1_score(all_labels, all_preds, average='macro', zero_division=0)
     return {'accuracy': accuracy, 'f1_macro': f1_macro}
-
-
 
 def run_ablation_analysis(adapter: ModelAdapter, 
                           data_loader: DataLoader, 
@@ -316,23 +292,14 @@ def run_ablation_analysis(adapter: ModelAdapter,
 def calculate_attribution_magnitude(attributions_tensor):
     return torch.sum(torch.abs(attributions_tensor))
 
-# def calculate_relative_contribution(img_attr_score, tab_attr_score, epsilon=1e-10):
-#     total_attribution = img_attr_score + tab_attr_score + epsilon
-#     return (img_attr_score / total_attribution) * 100.0, (tab_attr_score / total_attribution) * 100.0
 def calculate_relative_contribution(img_attr_score, tab_attr_score, epsilon=1e-10):
     """
-    将两个模态的绝对归因分数转换为相对百分比 (r_i, r_t)。
-    [已修正：添加 .item() 来移回 CPU]
+    [已修正：包含 .item() 来移回 CPU]
     """
     total_attribution = img_attr_score + tab_attr_score + epsilon
     img_percent = (img_attr_score / total_attribution) * 100.0
     tab_percent = (tab_attr_score / total_attribution) * 100.0
-    
-    # --- [关键修复] ---
-    # .item() 将标量张量转换为 Python 数字，
-    # 自动处理从 CUDA 到 CPU 的移动。
     return img_percent.item(), tab_percent.item()
-    # ---------------------
 
 def get_ig_contribution(adapter: ModelAdapter, 
                         img_sample: torch.Tensor, 
@@ -352,10 +319,21 @@ def get_ig_contribution(adapter: ModelAdapter,
 
     inputs_tuple = (img_embed_sample, tab_embed_sample)
     
+    # --- [热修复] ---
+    if img_embed_baseline.dim() < img_embed_sample.dim():
+        img_embed_baseline = img_embed_baseline.unsqueeze(0)
+    # ------------------
+    
     if adapter.model_type == "DAFT":
         tab_baseline_final = torch.zeros_like(tab_embed_sample)
     else:
-        tab_baseline_final = tab_embed_baseline
+        # --- [热修复] ---
+        if tab_embed_baseline.dim() < tab_embed_sample.dim():
+            tab_baseline_final = tab_embed_baseline.unsqueeze(0)
+        else:
+            tab_baseline_final = tab_embed_baseline
+        # --- [修复结束] ---
+        
     baselines_tuple = (img_embed_baseline, tab_baseline_final)
 
     attributions_tuple = ig.attribute(
@@ -368,7 +346,6 @@ def get_ig_contribution(adapter: ModelAdapter,
     img_score_l1 = calculate_attribution_magnitude(img_attributions)
     tab_score_l1 = calculate_attribution_magnitude(tab_attributions)
     return calculate_relative_contribution(img_score_l1, tab_score_l1)
-
 
 def run_ig_analysis_on_dataset(adapter: ModelAdapter, 
                                data_loader: DataLoader, 
@@ -387,20 +364,21 @@ def run_ig_analysis_on_dataset(adapter: ModelAdapter,
 
     print(f"Calculating IG contributions for {len(data_loader)} samples...")
     
-    # 1. 在 'tqdm' 外添加 'enumerate'
+    # [重新添加 try/except 以确保鲁棒性]
     for i, batch in enumerate(tqdm(data_loader)):
         img_sample = batch[0][0].to(device)
         tab_sample = batch[0][1].to(device)
         target_class = batch[1].item()
-        
-        # [请保留此处的无 try/except 版本来进行调试]
-        img_pct, tab_pct = get_ig_contribution(
-            adapter, img_sample, tab_sample,
-            img_embed_baseline, tab_embed_baseline,
-            target_class, m_steps=100
-        )
-        all_results.append((img_pct, tab_pct))
-
+        try:
+            img_pct, tab_pct = get_ig_contribution(
+                adapter, img_sample, tab_sample,
+                img_embed_baseline, tab_embed_baseline,
+                target_class, m_steps=100
+            )
+            all_results.append((img_pct, tab_pct))
+        except Exception as e:
+            print(f"警告: 样本 {i} 的 IG 计算失败: {e}")
+            all_results.append((np.nan, np.nan))
 
     print("\n--- IG Analysis Results (Average Local Contribution) ---")
     results_array = np.array(all_results)
@@ -408,19 +386,17 @@ def run_ig_analysis_on_dataset(adapter: ModelAdapter,
     mean_tab_contrib = np.nanmean(results_array[:, 1])
     std_img = np.nanstd(results_array[:, 0])
     n_samples = results_array.shape[0]
-    ci_img = 1.96 * (std_img / np.sqrt(n_samples))
-    ci_tab = 1.96 * (np.nanstd(results_array[:, 1]) / np.sqrt(n_samples))
+    ci_img = 1.96 * (std_img / np.sqrt(n_samples)) if n_samples > 0 and std_img is not np.nan else np.nan
+    ci_tab = 1.96 * (np.nanstd(results_array[:, 1]) / np.sqrt(n_samples)) if n_samples > 0 and np.nanstd(results_array[:, 1]) is not np.nan else np.nan
 
     print(f"Total samples: {n_samples}")
     print(f"  > Image Modality: {mean_img_contrib:.2f}% (± {ci_img:.2f} 95% CI)")
     print(f"  > Tabular Modality: {mean_tab_contrib:.2f}% (± {ci_tab:.2f} 95% CI)")
     print("-" * 56)
 
-
 # =========================================================================
 #
-# PART 4: 主执行脚本
-# (已更新为使用 Evaluator.load_from_checkpoint)
+# PART 3: 主入口函数 (供您的 evaluate.py 调用)
 #
 # =========================================================================
 
@@ -437,160 +413,84 @@ def grab_arg_from_checkpoint(args: Namespace, arg_name: str):
     else:
         load_args = args
     if isinstance(load_args, Namespace):
-        return getattr(load_args, arg_name, None) # 使用 .get(..., None) 更安全
+        return getattr(load_args, arg_name, None)
     else:
         return load_args.get(arg_name, None)
 
-def load_analysis_datasets(cfg: Namespace):
+def run_full_analysis(hparams, 
+                      best_checkpoint_path, 
+                      train_dataset_for_baseline, 
+                      test_dataset_for_analysis):
     """
-    使用您更正后的 'test_dataset' 逻辑加载 DataLoaders。
-   
+    主函数：加载 checkpoint、hparams、模型、数据，
+    并运行两种分析。
     """
     
-    # 共同参数
-    shared_args = {
-        'delete_segmentation': cfg.delete_segmentation,
-        'eval_one_hot': False, 'train': False, 'target': cfg.target,
-        'corruption_rate': 0.0, 'data_base': cfg.data_base,
-        'missing_tabular': False, 'missing_strategy': 'None',
-        'missing_rate': 0.0,
-        'augmentation_speedup': cfg.augmentation_speedup,
-        'algorithm_name': cfg.algorithm_name # (来自 ImagingAndTabularDataset 的 __init__)
-    }
+    DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print("\n" + "="*60)
+    print("--- [开始运行 Post-Hoc 模态贡献度分析] ---")
+    print(f"分析 Checkpoint: {best_checkpoint_path}")
     
-    # --- 1. 创建训练数据集 (用于基线计算) ---
-    if cfg.eval_datatype == 'multimodal':
-        img_size_train = grab_arg_from_checkpoint(cfg, 'img_size')
-        aug_rate_train = 0.0
-    else: # imaging_and_tabular
-        img_size_train = cfg.img_size
-        aug_rate_train = 0.0
+    # --- 1. 实例化 Evaluator (正确的方式) ---
+    try:
+        eval_module = Evaluator.load_from_checkpoint(
+            checkpoint_path=best_checkpoint_path,
+            map_location=DEVICE
+        )
+    except Exception as e:
+        print(f"错误: 无法使用 .load_from_checkpoint 加载 Evaluator。")
+        print(f"将尝试手动加载 (这可能不适用于所有模型)...")
+        eval_module = Evaluator(hparams).to(DEVICE)
+        state_dict = torch.load(best_checkpoint_path, map_location=DEVICE)['state_dict']
+        eval_module.load_state_dict(state_dict)
         
-    train_dataset = ImagingAndTabularDataset(
-        data_path_imaging=cfg.data_train_eval_imaging,
-        eval_train_augment_rate=aug_rate_train, 
-        data_path_tabular=cfg.data_train_eval_tabular,
-        field_lengths_tabular=cfg.field_lengths_tabular,
-        labels_path=cfg.labels_train_eval_imaging, 
-        img_size=img_size_train, 
-        live_loading=cfg.live_loading,
-        **shared_args
-    )
-    
-    # --- 2. 创建测试数据集 (用于分析) ---
-    if cfg.eval_datatype == 'multimodal':
-        img_size_test = grab_arg_from_checkpoint(cfg, 'img_size')
-        aug_rate_test = 0.0
-    else: # imaging_and_tabular
-        img_size_test = cfg.img_size
-        aug_rate_test = 0.0
-        
-    test_dataset = ImagingAndTabularDataset(
-        data_path_imaging=cfg.data_test_eval_imaging,
-        eval_train_augment_rate=aug_rate_test, 
-        data_path_tabular=cfg.data_test_eval_tabular,
-        field_lengths_tabular=cfg.field_lengths_tabular,
-        labels_path=cfg.labels_test_eval_imaging, 
-        img_size=img_size_test,
-        live_loading=cfg.live_loading,
-        **shared_args
-    )
-    
-    # --- 3. 创建 DataLoaders ---
+    eval_module.eval()
+    model_to_analyze = eval_module.model
+    # 使用 eval_module.hparams，因为它是在 checkpoint 中被验证过的
+    loaded_hparams = eval_module.hparams 
+    print("Model loaded successfully via Evaluator.")
+
+    # --- 2. 创建模型适配器 ---
+    adapter = ModelAdapter(model_to_analyze, loaded_hparams)
+
+    # --- 3. 加载 Data (使用传入的 Datasets) ---
+    print("Preparing DataLoaders from provided datasets...")
     train_loader = DataLoader(
-        train_dataset, batch_size=256, shuffle=False, num_workers=cfg.num_workers
+        train_dataset_for_baseline, 
+        batch_size=256, shuffle=False, 
+        num_workers=loaded_hparams.num_workers
     )
     test_loader_ablation = DataLoader(
-        test_dataset, batch_size=256, shuffle=False, num_workers=cfg.num_workers
+        test_dataset_for_analysis, 
+        batch_size=256, shuffle=False, 
+        num_workers=loaded_hparams.num_workers
     )
     test_loader_ig = DataLoader(
-        test_dataset, batch_size=1, shuffle=False, num_workers=cfg.num_workers
+        test_dataset_for_analysis, 
+        batch_size=1, shuffle=False, 
+        num_workers=loaded_hparams.num_workers
     )
     print("DataLoaders prepared.")
-    return train_loader, test_loader_ablation, test_loader_ig
 
-# ----------------------------------------------------
-# 6. 如何使用 (请替换为您自己的路径和 Dataloader)
-# ----------------------------------------------------
-
-def load_and_run_from_checkpoint(checkpoints:str):
-    """
-    加载所有配置、实例化对象并运行分析。
-    """
-    
-    # --- 1. 加载配置 ---
-    checkpoints_path = checkpoints
-    DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    
-    print(f"Loading checkpoint from: {checkpoints_path}")
-    checkpoint = torch.load(checkpoints_path, map_location=DEVICE)
-    
-    hparams = Namespace(**checkpoint['hyper_parameters'])
-    state_dict = checkpoint['state_dict']
-    
-    # --- 2. 应用修复补丁 (Hacks) ---
-    # hparams.checkpoint = None      # 避免 FileNotFoundError
-    # hparams.share_weights = False  # 避免 AttributeError
-    hparams.missing_tabular = False
-    hparams.eval_one_hot = False
-
-    # --- 3. 实例化 Evaluator (并自动实例化模型) ---
-    # 我们使用 'hparams' 手动实例化 Evaluator，
-    # 而不是使用 .load_from_checkpoint
-    print("Instantiating Evaluator (this will load the model)...")
-    eval_module = Evaluator(hparams).to(DEVICE)
-    
-    # --- 4. 手动加载 State Dict ---
-    # (因为我们绕过了 .load_from_checkpoint)
-    print("Loading state_dict into Evaluator...")
-    eval_module.load_state_dict(state_dict)
-    eval_module.eval()
-    print("Model loaded successfully.")
-
-    # --- 5. 获取模型并创建适配器 ---
-    model_to_analyze = eval_module.model
-    adapter = ModelAdapter(model_to_analyze, hparams)
-
-    # --- 6. 加载 Data ---
-    train_loader, test_loader_ablation, test_loader_ig = load_analysis_datasets(hparams)
-
-    # --- 7. 运行完整分析 ---
-    print("\n--- Computing Shared Baselines ---")
-    model_id_name = hparams.algorithm_name if hparams.eval_datatype == 'imaging_and_tabular' else 'TIP'
-    dataset_name = hparams.target
+    # --- 4. 运行完整分析 ---
+    model_id_name = loaded_hparams.algorithm_name if loaded_hparams.eval_datatype == 'imaging_and_tabular' else 'TIP'
+    dataset_name = loaded_hparams.target
     BASELINE_FILE_PATH = f"./{dataset_name}_{model_id_name}_baselines.pt"
-    # --------------------------
-
+    
     print("\n--- Computing Shared Baselines ---")
     img_baseline, tab_baseline = compute_mean_embeddings(
-        adapter, 
-        train_loader, 
-        DEVICE,
-        BASELINE_FILE_PATH  # <-- 传入文件路径
+        adapter, train_loader, DEVICE, BASELINE_FILE_PATH
     )
     
-    # run_ablation_analysis(
-    #     adapter, test_loader_ablation, DEVICE,
-    #     img_baseline, tab_baseline
-    # )
+    run_ablation_analysis(
+        adapter, test_loader_ablation, DEVICE,
+        img_baseline, tab_baseline
+    )
     
     run_ig_analysis_on_dataset(
         adapter, test_loader_ig, DEVICE,
         img_baseline, tab_baseline
     )
     
-    print("\n\n--- Full Analysis Complete ---")
-
-if __name__ == "__main__":
-    
-    
-    print("\n--- 脚本已准备就绪 ---")
-
-    checkpoints_path = [
-        # "/mnt/hdd/jiazy/checkpoints/dvm/Concat/checkpoint_best_acc.ckpt",
-        # '/mnt/hdd/jiazy/checkpoints/dvm/DAFT/checkpoint_best_acc.ckpt',
-        # '/mnt/hdd/jiazy/checkpoints/dvm/Max/checkpoint_best_acc.ckpt'
-        '/mnt/hdd/jiazy/checkpoints/dvm/TIP/checkpoint_best_acc.ckpt'
-    ]
-    for checkpoint in checkpoints_path:
-        load_and_run_from_checkpoint(checkpoint)
+    print("--- [模态贡献度分析完成] ---")
+    print("="*60 + "\n")

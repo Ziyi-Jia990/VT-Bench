@@ -87,6 +87,11 @@ class ContrastiveReconstructImagingAndTabularDataset(Dataset):
           print(f'Using standard (0-255 -> 0-1) transform for CelebA (Albumentations)')
           self.default_transform = A.Compose([
               A.Resize(height=img_size, width=img_size),
+              A.Normalize(
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225],
+                    max_pixel_value=255.0
+                ),
               ToTensorV2() # 自动处理 [0, 255] -> [0.0, 1.0] 和 HWC -> CHW
           ])
       elif self.dataset_name == 'breast_cancer': # <-- 替换为您数据集的名称

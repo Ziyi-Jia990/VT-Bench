@@ -26,32 +26,77 @@ class ReconstructionLoss(torch.nn.Module):
     self.register_buffer('cat_offsets', cat_offsets, persistent=False)
     self.softmax = nn.Softmax(dim=1)
 
-  def forward(self, out: Tuple, y: torch.Tensor, mask: torch.Tensor=None) -> torch.Tensor:
-    B, _, D = out[0].shape
-    # (B*N1, D)
-    out_cat = out[0].reshape(B*self.num_cat, D)
-    # (B, N2)
-    out_con = out[1].squeeze(-1)
-    target_cat = (y[:, :self.num_cat].long()+self.cat_offsets).reshape(B*self.num_cat)
-    target_con = y[:, self.num_cat:]
-    mask_cat = mask[:, :self.num_cat].reshape(B*self.num_cat)
-    mask_con = mask[:, self.num_cat:]
+  # def forward(self, out: Tuple, y: torch.Tensor, mask: torch.Tensor=None) -> torch.Tensor:
+  #   B, _, D = out[0].shape
+  #   # (B*N1, D)
+  #   out_cat = out[0].reshape(B*self.num_cat, D)
+  #   # (B, N2)
+  #   out_con = out[1].squeeze(-1)
+  #   target_cat = (y[:, :self.num_cat].long()+self.cat_offsets).reshape(B*self.num_cat)
+  #   target_con = y[:, self.num_cat:]
+  #   mask_cat = mask[:, :self.num_cat].reshape(B*self.num_cat)
+  #   mask_con = mask[:, self.num_cat:]
 
-    # cat loss
-    prob_cat = self.softmax(out_cat)
-    target_cat_clamped = target_cat.clamp(min=0)
-    onehot_cat = torch.nn.functional.one_hot(target_cat_clamped, num_classes=D)
-    loss_cat = -onehot_cat * torch.log(prob_cat+1e-8)
-    loss_cat = loss_cat.sum(dim=1)
-    loss_cat = (loss_cat*mask_cat).sum()/mask_cat.sum()   
+  #   # cat loss
+  #   prob_cat = self.softmax(out_cat)
+  #   target_cat_clamped = target_cat.clamp(min=0)
+  #   onehot_cat = torch.nn.functional.one_hot(target_cat_clamped, num_classes=D)
+  #   loss_cat = -onehot_cat * torch.log(prob_cat+1e-8)
+  #   loss_cat = loss_cat.sum(dim=1)
+  #   loss_cat = (loss_cat*mask_cat).sum()/mask_cat.sum()   
 
-    # con loss
-    loss_con = (out_con-target_con)**2
-    loss_con = (loss_con*mask_con).sum()/mask_con.sum()   
+  #   # con loss
+  #   loss_con = (out_con-target_con)**2
+  #   loss_con = (loss_con*mask_con).sum()/mask_con.sum()   
 
-    loss = (loss_cat + loss_con)/2
+  #   loss = (loss_cat + loss_con)/2
   
-    return loss, prob_cat, target_cat, mask_cat
+  #   return loss, prob_cat, target_cat, mask_cat
+
+  def forward(self, out: Tuple, y: torch.Tensor, mask: torch.Tensor=None) -> torch.Tensor:
+      B, _, D = out[0].shape
+      # (B*N1, D)
+      out_cat = out[0].reshape(B*self.num_cat, D)
+      target_cat = (y[:, :self.num_cat].long()+self.cat_offsets).reshape(B*self.num_cat)
+      mask_cat = mask[:, :self.num_cat].reshape(B*self.num_cat)
+
+      # cat loss
+      prob_cat = self.softmax(out_cat)
+      target_cat_clamped = target_cat.clamp(min=0)
+      onehot_cat = torch.nn.functional.one_hot(target_cat_clamped, num_classes=D)
+      loss_cat = -onehot_cat * torch.log(prob_cat+1e-8)
+      loss_cat = loss_cat.sum(dim=1)
+
+      # --- 修复 1：添加对 mask_cat 的安全检查 ---
+      if mask_cat.sum() == 0:
+          # 如果这个批次中没有任何类别特征被掩码，损失为 0
+          loss_cat = torch.tensor(0.0, device=out_cat.device)
+      else:
+          loss_cat = (loss_cat*mask_cat).sum() / mask_cat.sum()   
+
+      # --- 修复 2：检查 self.num_con，防止 0/0 ---
+      if self.num_con > 0:
+          # (B, N2)
+          out_con = out[1].squeeze(-1)
+          target_con = y[:, self.num_cat:]
+          mask_con = mask[:, self.num_cat:]
+
+          # con loss
+          loss_con_unmasked = (out_con-target_con)**2
+          
+          if mask_con.sum() == 0:
+              # 如果这个批次中没有任何连续特征被掩码（或 num_con 为 0），损失为 0
+              loss_con = torch.tensor(0.0, device=out_con.device)
+          else:
+              loss_con = (loss_con_unmasked*mask_con).sum() / mask_con.sum()
+      else:
+          # 如果数据集中没有连续特征，con loss 必须为 0
+          loss_con = torch.tensor(0.0, device=out_cat.device)
+      # --- 修复结束 ---
+
+      loss = (loss_cat + loss_con)/2
+  
+      return loss, prob_cat, target_cat, mask_cat
 
 
 

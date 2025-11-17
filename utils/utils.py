@@ -109,8 +109,7 @@ def grab_image_augmentations(img_size: int, target: str, augmentation_speedup: b
         print('Using cardiac transform for train augmentation')
 
     elif target in ['celeba', 'adoption']:
-        # [新增分支] 适用于 [0, 255] 范围的标准 RGB 图像
-        print(f'Using {target} transform (RGB + 0-1 Norm) for train augmentation')
+        # ...
         if augmentation_speedup:
             transform = A.Compose([
                 A.HorizontalFlip(p=0.5),
@@ -118,17 +117,15 @@ def grab_image_augmentations(img_size: int, target: str, augmentation_speedup: b
                 A.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5),
                 A.RandomResizedCrop(height=img_size, width=img_size, scale=(0.2, 1.0)),
                 
-                # [修复] 使用 ToTensorV2 进行归一化和维度转换
+                # vvvv 修复：添加下面这块 vvvv
+                A.Normalize(
+                    mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225],
+                    max_pixel_value=255.0
+                ),
+                # ^^^^ 修复：添加上面这块 ^^^^
+                
                 ToTensorV2() 
-            ])
-        else:
-            # (假设 non-speedup 路径也使用 'cardiac' 的 torchvision 增强)
-            transform = transforms.Compose([
-                transforms.RandomHorizontalFlip(),
-                transforms.RandomRotation(45),
-                transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5),
-                transforms.RandomResizedCrop(size=img_size, scale=(0.2,1)),
-                transforms.Lambda(convert_to_float) # 假设 non-speedup 路径加载的已是 [0, 1]
             ])
 
     elif target.lower() == 'breast_cancer':
@@ -267,6 +264,39 @@ def grab_hard_eval_image_augmentations(img_size: int, target: str, augmentation_
             transforms.RandomResizedCrop(size=img_size, scale=(0.6,1)),
             transforms.ToTensor() # 自动处理 [0, 255] -> [0.0, 1.0]
         ])
+  elif target.lower() == 'celeba':
+      # 假设所有其他数据集都是标准的RGB图像，需要 ImageNet 归一化
+      print(f'Using DEFAULT (ImageNet Norm) transform for hard eval augmentation for target: {target}')
+      if augmentation_speedup:
+          transform = A.Compose([
+              A.HorizontalFlip(p=0.5),
+              A.Rotate(limit=45),
+              A.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5),
+              A.RandomResizedCrop(height=img_size, width=img_size, scale=(0.6, 1.0)),
+              
+              # 关键修复：替换 A.Lambda
+              A.Normalize(
+                  mean=[0.485, 0.456, 0.406],
+                  std=[0.229, 0.224, 0.225],
+                  max_pixel_value=255.0
+              ),
+              ToTensorV2()
+          ])
+      else:
+          # 同样修复 torchvision (non-speedup) 分支
+          transform = transforms.Compose([
+              transforms.RandomHorizontalFlip(),
+              transforms.RandomRotation(45),
+              transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5),
+              transforms.RandomResizedCrop(size=img_size, scale=(0.6,1)),
+              
+              # 关键修复：替换 transforms.Lambda
+              transforms.ToTensor(), # 自动缩放到 [0, 1]
+              transforms.Normalize(
+                  mean=[0.485, 0.456, 0.406],
+                  std=[0.229, 0.224, 0.225]
+              )
+          ])
   else:
     if augmentation_speedup:
       transform = A.Compose([
