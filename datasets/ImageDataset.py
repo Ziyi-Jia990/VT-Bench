@@ -68,14 +68,14 @@ class ImageDataset(Dataset):
             
         # --- 【修复开始】---
         
-        elif self.dataset_name.lower() == 'adoption': 
-            print(f'Using adoption transform for default transform (Albumentations)')
-            # 修正：self.default_transform -> self.transform_val
-            self.transform_val = A.Compose([
-                A.Resize(height=img_size, width=img_size),
-                ToTensorV2() 
-            ])
-        elif self.dataset_name.lower() == 'celeba':
+        # elif self.dataset_name.lower() == 'adoption': 
+        #     print(f'Using adoption transform for default transform (Albumentations)')
+        #     # 修正：self.default_transform -> self.transform_val
+        #     self.transform_val = A.Compose([
+        #         A.Resize(height=img_size, width=img_size),
+        #         ToTensorV2() 
+        #     ])
+        elif self.dataset_name.lower() in ['celeba', 'adoption', 'pawpularity']:
             print(f'Using standard (0-255 -> 0-1) transform for CelebA (Albumentations)')
             # 修正：self.default_transform -> self.transform_val
             self.transform_val = A.Compose([

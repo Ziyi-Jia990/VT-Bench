@@ -98,10 +98,11 @@ class ImagingAndTabularDataset(Dataset):
             ToTensorV2() # <--- 添加 (您之前的代码里漏了这行)
         ])
         # --- 修改结束 ---
-      elif self.dataset_name == 'celeba':
+      elif self.dataset_name in ['celeba', 'pawpularity']:
           print(f'Using standard (0-255 -> 0-1) transform for CelebA (Albumentations)')
           self.default_transform = A.Compose([
               A.Resize(height=img_size, width=img_size),
+              A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], max_pixel_value=255.0),
               ToTensorV2() # 自动处理 [0, 255] -> [0.0, 1.0] 和 HWC -> CHW
           ])
       elif self.dataset_name == 'breast_cancer': # <-- 替换为您数据集的名称
@@ -127,9 +128,10 @@ class ImagingAndTabularDataset(Dataset):
           raise ValueError(f'Unsupported dataset: {self.dataset_name}.')  
     else:
       self.default_transform = transforms.Compose([
-        transforms.Resize(size=(img_size,img_size)),
-        transforms.Lambda(convert_to_float)
-      ])
+            transforms.Resize(size=(img_size, img_size)),
+            transforms.ToTensor(),
+            A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], max_pixel_value=255.0),
+        ])
 
     # Tabular
     self.data_tabular = np.array(self.read_and_parse_csv(data_path_tabular))
@@ -318,6 +320,7 @@ class ImagingAndTabularDataset(Dataset):
         label = torch.tensor(self.labels[index], dtype=torch.float) # 回归用 float
     else:
         label = torch.tensor(self.labels[index], dtype=torch.long)  # 分类用 long
+
 
     if self.missing_tabular:
       missing_mask = torch.from_numpy(self.missing_mask_data[index])

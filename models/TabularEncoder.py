@@ -112,8 +112,13 @@ class TabularEncoder(nn.Module):
     Passes input through encoder and projector. 
     Output is ready for loss calculation.
     """
-    if isinstance(x, Tuple) or isinstance(x, List):
-      x = self.encoder(x[0])
-    else:
-      x = self.encoder(x)
+    # === 核心修改：处理 Tuple/List 并强制转换为 Float ===
+    if isinstance(x, (tuple, list)):
+        x = x[0]
+    
+    # 强制转换为 float32，解决 nn.Linear 不接受 Long 类型的问题
+    x = x.float() 
+    # ================================================
+
+    x = self.encoder(x)
     return x

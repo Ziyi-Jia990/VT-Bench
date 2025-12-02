@@ -10,7 +10,7 @@ weights:
 live_loading: True
 delete_segmentation: False
 balanced_accuracy: False
-eval_metric: acc
+eval_metric: mae
 data_orig:
 low_data_splits: ['']
 

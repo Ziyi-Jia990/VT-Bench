@@ -29,6 +29,13 @@ class MultimodalSimCLR(Pretraining):
     # Tabular
     self.initialize_tabular_encoder_and_projector()
 
+    if self.hparams.task == 'regression':
+        # 如果是回归任务，禁止使用依赖离散标签的 Loss
+        if self.hparams.loss.lower() in ['supcon', 'binary_supcon', 'remove_fn', 'binary_remove_fn', 'kpositive']:
+             print(f"Error: You are using regression (num_classes=1) but selected supervised loss '{self.hparams.loss}'.")
+             print("Supervised Contrastive Loss usually requires discrete classes. Recommendation: use 'clip' or 'ntxent'.")
+             # 你甚至可以在这里直接 raise ValueError 阻止运行
+
     # Multimodal
     nclasses = hparams.batch_size
     self.criterion_val = CLIPLoss(temperature=self.hparams.temperature, lambda_0=self.hparams.lambda_0)

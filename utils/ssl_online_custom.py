@@ -14,23 +14,7 @@ from pl_bolts.models.self_supervised.evaluator import SSLEvaluator
 
 
 class SSLOnlineEvaluator(Callback):  # pragma: no cover
-    """Attaches a MLP for fine-tuning using the standard self-supervised protocol.
-
-    Example::
-
-        # your datamodule must have 2 attributes
-        dm = DataModule()
-        dm.num_classes = ... # the num of classes in the datamodule
-        dm.name = ... # name of the datamodule (e.g. ImageNet, STL10, CIFAR10)
-
-        # your model must have 1 attribute
-        model = Model()
-        model.z_dim = ... # the representation dim
-
-        online_eval = SSLOnlineEvaluator(
-            z_dim=model.z_dim
-        )
-    """
+    """Attaches a MLP for fine-tuning using the standard self-supervised protocol."""
 
     def __init__(
         self,
@@ -43,12 +27,6 @@ class SSLOnlineEvaluator(Callback):  # pragma: no cover
         strategy: str = None,
         task: str = 'classification'
     ):
-        """
-        Args:
-            z_dim: Representation dimension
-            drop_p: Dropout probability
-            hidden_dim: Hidden dimension for the fine-tune MLP
-        """
         super().__init__()
 
         self.z_dim = z_dim
@@ -57,19 +35,22 @@ class SSLOnlineEvaluator(Callback):  # pragma: no cover
 
         self.optimizer: Optional[Optimizer] = None
         self.online_evaluator: Optional[SSLEvaluator] = None
-        self.num_classes: Optional[int] = None
-        self.dataset: Optional[str] = None
         self.num_classes: Optional[int] = num_classes
+        self.dataset: Optional[str] = None
         self.swav = swav
         self.multimodal = multimodal
         self.strategy = strategy
-        self.task = task # <--- [新增] 保存任务
+        self.task = task 
 
         self._recovered_callback_state: Optional[Dict[str, Any]] = None
 
     def setup(self, trainer: Trainer, pl_module: LightningModule, stage: Optional[str] = None) -> None:
         if self.num_classes is None:
-            self.num_classes = trainer.datamodule.num_classes
+            # [修正 3] 如果是回归任务，强制 num_classes 为 1，忽略 DataModule 的设置
+            if self.task == 'regression':
+                self.num_classes = 1
+            else:
+                self.num_classes = trainer.datamodule.num_classes
 
     def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         self.online_evaluator = SSLEvaluator(
@@ -87,11 +68,9 @@ class SSLOnlineEvaluator(Callback):  # pragma: no cover
         if accel.is_distributed:
             if accel._strategy_flag in ["ddp", "ddp2", "ddp_spawn"]:
                 from torch.nn.parallel import DistributedDataParallel as DDP
-
                 self.online_evaluator = DDP(self.online_evaluator, device_ids=[pl_module.device])
             elif trainer._strategy_flag == "dp":
                 from torch.nn.parallel import DataParallel as DP
-
                 self.online_evaluator = DP(self.online_evaluator, device_ids=[pl_module.device])
             else:
                 rank_zero_warn(
@@ -105,7 +84,6 @@ class SSLOnlineEvaluator(Callback):  # pragma: no cover
             self.optimizer.load_state_dict(self._recovered_callback_state["optimizer_state"])
 
     def to_device(self, batch: Sequence, device: Union[str, torch.device]) -> Tuple[Tensor, Tensor]:
-
         if self.swav:
             x, y = batch
             x = x[0]
@@ -129,7 +107,10 @@ class SSLOnlineEvaluator(Callback):  # pragma: no cover
             x_t = x_t.to(device)
             return x, y, x_t
         else:
-            Exception('Strategy must be comparison or tip')
+            # 添加默认处理，防止报错
+            x = x.to(device)
+            y = y.to(device)
+            return x, y, None
 
     def shared_step(
         self,
@@ -144,20 +125,23 @@ class SSLOnlineEvaluator(Callback):  # pragma: no cover
         # forward pass
         mlp_logits = self.online_evaluator(representations)  # type: ignore[operator]
         
-        # --- [修改] 根据任务类型区分 Loss 和 Metrics ---
         if self.task == 'regression':
-            # 回归任务：Target 形状通常是 (B,)，Logits 是 (B, 1)，需要 squeeze
-            mlp_logits = mlp_logits.squeeze()
+            # [修正 2] 强制转 float，防止 Double 报错
+            y = y.float() 
+            
+            # [修正 1] 使用 view(-1) 代替 squeeze()，处理 BatchSize=1 的情况更安全
+            mlp_logits = mlp_logits.view(-1)
+            y = y.view(-1)
+            
             mlp_loss = F.mse_loss(mlp_logits, y)
             
-            # 计算回归指标
             rmse = mean_squared_error(mlp_logits, y, squared=False)
             mae = mean_absolute_error(mlp_logits, y)
             r2 = r2_score(mlp_logits, y)
             
             return rmse, r2, mae, mlp_loss
         else:
-            # 分类任务（原有逻辑）
+            # 分类任务
             mlp_loss = F.cross_entropy(mlp_logits, y)
             mlp_logits_sm = mlp_logits.softmax(dim=1)
             if self.num_classes == 2:
@@ -167,7 +151,7 @@ class SSLOnlineEvaluator(Callback):  # pragma: no cover
                 auc = multiclass_auroc(mlp_logits_sm, y, self.num_classes)
                 acc = multiclass_accuracy(mlp_logits_sm, y, self.num_classes)
 
-            return acc, auc, None, mlp_loss # 返回一个 None 占位，保持解包数量一致（或者如下分开处理）
+            return acc, auc, None, mlp_loss
 
     def on_train_batch_end(
         self,
@@ -181,7 +165,6 @@ class SSLOnlineEvaluator(Callback):  # pragma: no cover
         if self.task == 'regression':
             train_rmse, train_r2, train_mae, mlp_loss = self.shared_step(pl_module, batch)
             
-            # update finetune weights
             mlp_loss.backward()
             self.optimizer.step()
             self.optimizer.zero_grad()
@@ -193,7 +176,6 @@ class SSLOnlineEvaluator(Callback):  # pragma: no cover
         else:
             train_acc, train_auc, _, mlp_loss = self.shared_step(pl_module, batch)
 
-            # update finetune weights
             mlp_loss.backward()
             self.optimizer.step()
             self.optimizer.zero_grad()

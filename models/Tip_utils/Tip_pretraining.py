@@ -13,6 +13,8 @@ from sklearn.linear_model import LogisticRegression
 from lightly.models.modules import SimCLRProjectionHead
 from pl_bolts.optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
 from pl_bolts.utils.self_supervised import torchvision_ssl_encoder
+from sklearn.linear_model import LogisticRegression, Ridge
+from torchmetrics import MeanSquaredError, R2Score, MeanAbsoluteError 
 
 import sys
 # TODO: Change the path to your own project directory if you want to run this file alone for debugging 
@@ -63,6 +65,9 @@ class Pretraining(pl.LightningModule):
     # Classifier
     self.estimator = None
 
+    # === 1. 判断是否为回归任务 ===
+    self.is_regression = (self.hparams.task == 'regression')
+
     # Accuracy calculated against all others in batch of same view except for self (i.e. -1) and all of the other view
     self.top1_acc_train = torchmetrics.Accuracy(task='multiclass', top_k=1, num_classes=nclasses_train)
     self.top1_acc_val = torchmetrics.Accuracy(task='multiclass', top_k=1, num_classes=nclasses_val)
@@ -82,17 +87,24 @@ class Pretraining(pl.LightningModule):
     self.acc_train_itm = torchmetrics.Accuracy(task='binary', num_classes=2)
     self.acc_val_itm = torchmetrics.Accuracy(task='binary', num_classes=2)
 
-    task = 'binary' if self.hparams.num_classes == 2 else 'multiclass'
-
-    self.classifier_acc_train = torchmetrics.Accuracy(task=task, num_classes=self.hparams.num_classes)
-    self.classifier_acc_val = torchmetrics.Accuracy(task=task, num_classes=self.hparams.num_classes)
-
-    self.classifier_auc_train = torchmetrics.AUROC(task=task, num_classes=self.hparams.num_classes)
-    self.classifier_auc_val = torchmetrics.AUROC(task=task, num_classes=self.hparams.num_classes)
-    
-    self.classifier_f1_train = torchmetrics.F1Score(task=task, num_classes=self.hparams.num_classes, average='macro')
-    self.classifier_f1_val = torchmetrics.F1Score(task=task, num_classes=self.hparams.num_classes, average='macro')
-
+    # === 3. 初始化下游任务监控指标 (关键修改) ===
+    if self.is_regression:
+        print("Initializing Regression Metrics for Online Evaluation...")
+        self.classifier_mae_train = MeanAbsoluteError()
+        self.classifier_mae_val = MeanAbsoluteError()
+        
+        # 保留 MSE/R2 作为参考，也可以只看 MAE
+        self.classifier_mse_train = MeanSquaredError()
+        self.classifier_mse_val = MeanSquaredError()
+    else:
+        print("Initializing Classification Metrics for Online Evaluation...")
+        task = 'binary' if self.hparams.num_classes == 2 else 'multiclass'
+        self.classifier_acc_train = torchmetrics.Accuracy(task=task, num_classes=self.hparams.num_classes)
+        self.classifier_acc_val = torchmetrics.Accuracy(task=task, num_classes=self.hparams.num_classes)
+        self.classifier_auc_train = torchmetrics.AUROC(task=task, num_classes=self.hparams.num_classes)
+        self.classifier_auc_val = torchmetrics.AUROC(task=task, num_classes=self.hparams.num_classes)
+        self.classifier_f1_train = torchmetrics.F1Score(task=task, num_classes=self.hparams.num_classes, average='macro')
+        self.classifier_f1_val = torchmetrics.F1Score(task=task, num_classes=self.hparams.num_classes, average='macro')
 
   def load_pretrained_imaging_weights(self) -> None:
     """
@@ -222,37 +234,68 @@ class Pretraining(pl.LightningModule):
     if self.current_epoch != 0 and self.current_epoch % self.hparams.classifier_freq == 0:
       embeddings, labels = self.stack_outputs(train_step_outputs)
     
-      self.estimator = LogisticRegression(class_weight='balanced', max_iter=1000).fit(embeddings, labels)
-      preds, probs = self.predict_live_estimator(embeddings)
+      # 将数据转为 numpy 以适配 sklearn
+      X_np = embeddings.cpu().numpy()
+      y_np = labels.cpu().numpy()
 
-      self.classifier_acc_train(preds, labels)
-      self.classifier_auc_train(probs, labels)
-      self.classifier_f1_train(preds, labels)
+      if self.is_regression:
+          # === 回归逻辑 ===
+          # 使用 Ridge 回归 (岭回归)
+          self.estimator = Ridge(alpha=1.0).fit(X_np, y_np)
+          preds, _ = self.predict_live_estimator(embeddings) # probs 在回归中无用
+          
+          self.classifier_mae_train(preds, labels)
+          self.classifier_mse_train(preds, labels)
+          
+          self.log('classifier.train.mae', self.classifier_mae_train, on_epoch=True, on_step=False)
+          self.log('classifier.train.mse', self.classifier_mse_train, on_epoch=True, on_step=False)
+      
+      else:
+          # === 分类逻辑 (原代码) ===
+          self.estimator = LogisticRegression(class_weight='balanced', max_iter=1000).fit(embeddings, labels)
+          preds, probs = self.predict_live_estimator(embeddings)
 
-      self.log('classifier.train.accuracy', self.classifier_acc_train, on_epoch=True, on_step=False)
-      self.log('classifier.train.auc', self.classifier_auc_train, on_epoch=True, on_step=False)
-      self.log('classifier.train.macro_f1', self.classifier_f1_train, on_epoch=True, on_step=False)
+          self.classifier_acc_train(preds, labels)
+          self.classifier_auc_train(probs, labels)
+          self.classifier_f1_train(preds, labels)
+
+          self.log('classifier.train.accuracy', self.classifier_acc_train, on_epoch=True, on_step=False)
+          self.log('classifier.train.auc', self.classifier_auc_train, on_epoch=True, on_step=False)
+          self.log('classifier.train.macro_f1', self.classifier_f1_train, on_epoch=True, on_step=False)
 
   def validation_epoch_end(self, validation_step_outputs: List[torch.Tensor]) -> None:
     """
-    Log an image from each validation step and calc validation classifier performance
+    Log an image and calc validation performance
     """
     if self.hparams.log_images:
-      self.logger.log_image(key="Image Example", images=[validation_step_outputs[0]['sample_augmentation']])
+        # 这里加个 try-catch 比较安全，防止 dict key 不存在报错
+        try:
+            self.logger.log_image(key="Image Example", images=[validation_step_outputs[0]['sample_augmentation']])
+        except:
+            pass
 
-    # Validate classifier
+    # Validate classifier/regressor
     if not self.estimator is None and self.current_epoch % self.hparams.classifier_freq == 0:
-      embeddings, labels = self.stack_outputs(validation_step_outputs)
-      
-      preds, probs = self.predict_live_estimator(embeddings)
-      
-      self.classifier_acc_val(preds, labels)
-      self.classifier_auc_val(probs, labels)
-      self.classifier_f1_val(preds, labels)
+        embeddings, labels = self.stack_outputs(validation_step_outputs)
+        
+        preds, probs = self.predict_live_estimator(embeddings)
+        
+        if self.is_regression:
+            # [修改] 计算并记录 MAE
+          self.classifier_mae_val(preds, labels)
+          self.classifier_mse_val(preds, labels)
 
-      self.log('classifier.val.accuracy', self.classifier_acc_val, on_epoch=True, on_step=False)
-      self.log('classifier.val.auc', self.classifier_auc_val, on_epoch=True, on_step=False)
-      self.log('classifier.val.macro_f1', self.classifier_f1_val, on_epoch=True, on_step=False)
+          self.log('classifier.val.mae', self.classifier_mae_val, on_epoch=True, on_step=False)
+          self.log('classifier.val.mse', self.classifier_mse_val, on_epoch=True, on_step=False)
+        else:
+             # === 分类逻辑 ===
+            self.classifier_acc_val(preds, labels)
+            self.classifier_auc_val(probs, labels)
+            self.classifier_f1_val(preds, labels)
+
+            self.log('classifier.val.accuracy', self.classifier_acc_val, on_epoch=True, on_step=False)
+            self.log('classifier.val.auc', self.classifier_auc_val, on_epoch=True, on_step=False)
+            self.log('classifier.val.macro_f1', self.classifier_f1_val, on_epoch=True, on_step=False)
 
 
   def stack_outputs(self, outputs: List[torch.Tensor]) -> torch.Tensor:
@@ -274,15 +317,18 @@ class Pretraining(pl.LightningModule):
     """
     Predict using live estimator
     """
-    preds = self.estimator.predict(embeddings)
-    probs = self.estimator.predict_proba(embeddings)
-
-    preds = torch.tensor(preds)
-    probs = torch.tensor(probs)
+    embeddings_np = embeddings.cpu().numpy()
+    preds = self.estimator.predict(embeddings_np)
+    preds = torch.tensor(preds).to(embeddings.device) # 保持设备一致
     
-    # Only need probs for positive class in binary case
-    if self.hparams.num_classes == 2:
-      probs = probs[:,1]
+    probs = None 
+    
+    if not self.is_regression:
+        probs = self.estimator.predict_proba(embeddings_np)
+        probs = torch.tensor(probs).to(embeddings.device)
+        
+        if self.hparams.num_classes == 2:
+            probs = probs[:,1]
 
     return preds, probs
 

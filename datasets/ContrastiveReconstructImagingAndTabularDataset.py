@@ -78,15 +78,7 @@ class ContrastiveReconstructImagingAndTabularDataset(Dataset):
           A.Lambda(name='convert2tensor', image=convert_to_ts_01)
         ])
         print(f'Using cardiac transform for default transform in ContrastiveReconstructImagingAndTabularDataset')   
-      elif self.dataset_name == 'adoption': # <-- 确保你的文件名解析出来是 'adoption'
-        print(f'Using adoption transform for default transform (Albumentations)')
-        # --- 修改这里 ---
-        self.default_transform = A.Compose([
-            A.Resize(height=img_size, width=img_size),
-            ToTensorV2() # <--- 添加 (您之前的代码里漏了这行)
-        ])
-        # --- 修改结束 ---
-      elif self.dataset_name == 'celeba':
+      elif self.dataset_name in ['celeba', 'adoption', 'pawpularity']:
           print(f'Using standard (0-255 -> 0-1) transform for CelebA (Albumentations)')
           self.default_transform = A.Compose([
               A.Resize(height=img_size, width=img_size),

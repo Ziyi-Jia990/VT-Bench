@@ -161,7 +161,7 @@ def pretrain(hparams, wandb_logger):
     model.hparams.classifier_freq = float('Inf')
     z_dim =  hparams.multimodal_embedding_dim if hparams.strategy=='tip' else model.pooled_dim
     callbacks.append(SSLOnlineEvaluator(z_dim = z_dim, hidden_dim = hparams.embedding_dim, num_classes = hparams.num_classes, swav = False, multimodal = (hparams.datatype=='multimodal'), 
-                                        strategy=hparams.strategy))
+                                        strategy=hparams.strategy,task=hparams.task))
   callbacks.append(ModelCheckpoint(filename='checkpoint_last_epoch_{epoch:02d}', dirpath=logdir, save_on_train_epoch_end=True, auto_insert_metric_name=False))
   callbacks.append(LearningRateMonitor(logging_interval='epoch'))
 
