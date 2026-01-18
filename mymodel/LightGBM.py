@@ -7,6 +7,7 @@ from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, mean_square
 import sys
 import torch
 import os
+from hydra.core.hydra_config import HydraConfig
 
 # --- Hydra 导入 ---
 import hydra
@@ -19,11 +20,30 @@ def load_and_preprocess_data(cfg: DictConfig):
     try:
         # --- 1. 加载数据 ---
         X_train = pd.read_csv(cfg.data_train_eval_tabular, header=None)
-        X_test = pd.read_csv(cfg.data_val_eval_tabular, header=None)
+        X_test = pd.read_csv(cfg.data_test_eval_tabular, header=None)
         
         # 加载标签
-        y_train = torch.load(cfg.labels_train_eval_tabular).numpy()
-        y_test = torch.load(cfg.labels_val_eval_tabular).numpy()
+        # y_train = torch.load(cfg.labels_train_eval_tabular).numpy()
+        # y_test = torch.load(cfg.labels_test_eval_tabular).numpy()
+        y_train = torch.load(cfg.labels_train_eval_tabular, map_location="cpu")
+
+        if isinstance(y_train, torch.Tensor):
+            y_train = y_train.detach().cpu().numpy()
+        else:
+            y_train = np.asarray(y_train)
+
+        y_train = y_train.reshape(-1)  # (N,1) -> (N,)
+
+        y_test = torch.load(cfg.labels_val_eval_tabular, map_location="cpu")
+
+        if isinstance(y_test, torch.Tensor):
+            y_test = y_test.detach().cpu().numpy()
+        else:
+            y_test = np.asarray(y_test)
+
+        y_test = y_test.reshape(-1)
+
+
 
         print("    数据加载成功。")
 
@@ -78,7 +98,7 @@ def load_and_preprocess_data(cfg: DictConfig):
     except Exception as e:
         print(f"🔴 加载数据时发生错误: {e}")
         import traceback
-        traceback.print_traceback()
+        traceback.print_exc()
         sys.exit(1)
 
     # --- 5. 确定问题类型 (保持不变) ---
@@ -244,7 +264,9 @@ def main(cfg: DictConfig):
     X_train, y_train, X_test, y_test, problem_type, objective, num_class_param, scoring_metric = load_and_preprocess_data(cfg)
 
     # 允许 config.yaml 或命令行覆盖 'output_file_name'
-    output_filename = 'result/lgb_results.txt'
+    dataset_name = HydraConfig.get().runtime.choices.get("dataset", "unknown_dataset")
+    output_filename = os.path.join("result", f"lgb_results_{dataset_name}.txt")
+    os.makedirs(os.path.dirname(output_filename), exist_ok=True)
     seeds = [2022, 2023, 2024]
     
     # 3. 打开文件准备写入结果
