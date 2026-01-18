@@ -34,7 +34,7 @@ def load_and_preprocess_data(cfg: DictConfig):
 
         y_train = y_train.reshape(-1)  # (N,1) -> (N,)
 
-        y_test = torch.load(cfg.labels_val_eval_tabular, map_location="cpu")
+        y_test = torch.load(cfg.labels_test_eval_tabular, map_location="cpu")
 
         if isinstance(y_test, torch.Tensor):
             y_test = y_test.detach().cpu().numpy()
