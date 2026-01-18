@@ -18,7 +18,7 @@ low_data_splits: ['']
 
 # num of features
 num_cat: 26
-num_con: 49
+num_con: 48
 
 # pretrain imaging
 data_train_imaging: cardiac_train_paths_imaging.pt

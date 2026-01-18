@@ -95,7 +95,7 @@ class ImagingAndTabularDataset(Dataset):
           A.Lambda(name='convert2tensor', image=convert_to_ts)
         ])
         print('Using dvm transform for default transform')
-      elif self.dataset_name == 'cardiac':
+      elif self.dataset_name in ['cardiac', 'cad', 'infarction']:
         self.default_transform = A.Compose([
           A.Resize(height=img_size, width=img_size),
           A.Lambda(name='convert2tensor', image=convert_to_ts_01)

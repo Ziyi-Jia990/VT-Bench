@@ -24,8 +24,8 @@ lr_finder_lrs:
 multitarget:
 
 wandb_entity: siyiwind
-data_base: /mnt/hdd/jiazy/DVM-Car/features
-num_workers: 8
+data_base: /data1/jiazy/tab_image_bench/data/DVM-Car/features
+num_workers: 3
 
 algorithm_name: RESNET
 strategy: comparison

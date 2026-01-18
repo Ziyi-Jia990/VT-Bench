@@ -26,8 +26,8 @@ lr_finder_lrs:
 multitarget:
 
 wandb_entity: siyiwind
-data_base: /home/debian/jzy/dataset/petfinder_adoptionprediction
-num_workers: 8
+data_base: /data1/jiazy/tab_image_bench/PetFinder_datasets/dataset/petfinder_adoptionprediction
+num_workers: 3
 
 algorithm_name: DAFT
 strategy: comparison

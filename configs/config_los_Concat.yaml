@@ -27,7 +27,7 @@ multitarget:
 
 wandb_entity: siyiwind
 data_base: /mnt/hdd/jiazy/mimic/regression/los/features/
-num_workers: 3
+num_workers: 2
 
 algorithm_name: CONCAT
 strategy: comparison

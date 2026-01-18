@@ -24,7 +24,7 @@ lr_finder_lrs:
 multitarget:
 
 wandb_entity: siyiwind
-data_base: /mnt/hdd/jiazy/anime/features/
+data_base: /data1/jiazy/anime/features
 num_workers: 3
 
 algorithm_name: RESNET

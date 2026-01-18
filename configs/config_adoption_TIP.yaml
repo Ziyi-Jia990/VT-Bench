@@ -25,13 +25,14 @@ lr_finder_lrs:
 multitarget:
 
 wandb_entity: siyiwind
-data_base: /home/debian/jzy/dataset/petfinder_adoptionprediction
-num_workers: 10
+data_base: /data1/jiazy/tab_image_bench/PetFinder_datasets/dataset/petfinder_adoptionprediction
+num_workers: 3
 
 algorithm_name: TIP
 strategy: tip
-dataset_name: dvm
+dataset_name: adoption
 exp_name: NA
+share_weights: False
 
 
 wandb_project: LaaF
@@ -75,7 +76,7 @@ batch_size: 256
 # DVM 
 lr: 3.e-4
 lr_eval: 1.e-4
-weight_decay: 1.e-4
+weight_decay: 1.5e-6
 weight_decay_eval: 0
 val_check_interval: 1.0
 check_val_every_n_epoch: 1
@@ -119,7 +120,7 @@ datatype: multimodal
 eval_datatype: multimodal
 
 # General
-seed: 2026
+seed: 2022
 max_epochs: 500
 log_images: False
 use_wandb: True
@@ -157,23 +158,23 @@ dataset_length:
 resume_training: 
 wandb_id:
 
-labels_train_short: labels_train.pt
-labels_val_short: labels_valid.pt
-data_train_tabular_short: features_train.csv
-data_val_tabular_short: features_valid.csv
-data_train_imaging_short: paths_train.pt
-data_val_imaging_short: paths_valid.pt
-field_lengths_tabular_short: tabular_lengths.pt
-data_train_eval_tabular_short: features_train.csv
-labels_train_eval_tabular_short: labels_train.pt
-data_val_eval_tabular_short: features_valid.csv
-labels_val_eval_tabular_short: labels_valid.pt
-data_test_eval_tabular_short: features_test.csv
-labels_test_eval_tabular_short: labels_test.pt
-data_train_eval_imaging_short: paths_train.pt
-labels_train_eval_imaging_short: labels_train.pt
-data_val_eval_imaging_short: paths_valid.pt
-labels_val_eval_imaging_short: labels_valid.pt
-data_test_eval_imaging_short: paths_test.pt
-labels_test_eval_imaging_short: labels_test.pt
+labels_train_short:
+labels_val_short:
+data_train_tabular_short:
+data_val_tabular_short:
+data_train_imaging_short: 
+data_val_imaging_short:
+field_lengths_tabular_short:
+data_train_eval_tabular_short:
+labels_train_eval_tabular_short:
+data_val_eval_tabular_short:
+labels_val_eval_tabular_short:
+data_test_eval_tabular_short:
+labels_test_eval_tabular_short:
+data_train_eval_imaging_short:
+labels_train_eval_imaging_short:
+data_val_eval_imaging_short:
+labels_val_eval_imaging_short:
+data_test_eval_imaging_short:
+labels_test_eval_imaging_short:
 train_similarity_matrix_short:

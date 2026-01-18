@@ -25,8 +25,8 @@ lr_finder_lrs:
 multitarget:
 
 wandb_entity: siyiwind
-data_base: /mnt/hdd/jiazy/mimic/regression/los/features/
-num_workers: 3
+data_base: /data1/jiazy/tab_image_bench/mimic/regression/los/features/
+num_workers: 2
 
 algorithm_name: MAX
 strategy: comparison

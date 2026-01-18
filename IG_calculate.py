@@ -155,6 +155,73 @@ class ModelAdapter:
 # (这部分代码无需更改，因为 Adapter 已经处理了所有复杂性)
 #
 # =========================================================================
+import torch
+from tqdm import tqdm
+from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, mean_absolute_error, r2_score
+import numpy as np
+
+def calculate_full_ablation_performance(adapter, test_loader, device, img_baseline, tab_baseline, task='classification'):
+    """
+    专门计算两个模态都消融掉 (x'n) 的性能。
+    即模型输入完全由训练集均值 embedding 组成。
+    """
+    adapter.model.to(device)
+    adapter.model.eval()
+    
+    all_labels, all_preds = [], []
+    
+    print(f"--- Running Full Ablation (x'n) Evaluation ---")
+    with torch.no_grad():
+        for batch in tqdm(test_loader):
+            img_input = batch[0][0].to(device)
+            tab_input = batch[0][1].to(device)
+            labels = batch[1].to(device)
+            
+            batch_size = img_input.shape[0]
+
+            # --- 修复逻辑：动态匹配维度进行 expand ---
+            img_shape = [batch_size] + [-1] * (img_baseline.dim() - 1)
+            img_embed_ablated = img_baseline.expand(*img_shape)
+            
+            if adapter.model_type == "DAFT":
+                tab_embed_ablated = torch.zeros_like(tab_input) 
+            else:
+                tab_shape = [batch_size] + [-1] * (tab_baseline.dim() - 1)
+                tab_embed_ablated = tab_baseline.expand(*tab_shape)
+
+            logits = adapter.fusion_classifier_func(img_embed_ablated, tab_embed_ablated)
+            
+            # 3. 收集结果
+            if task == 'regression':
+                preds = logits.squeeze()
+            else:
+                preds = torch.argmax(logits, dim=1)
+                
+            all_labels.append(labels.cpu())
+            all_preds.append(preds.cpu())
+
+    all_labels = torch.cat(all_labels).numpy()
+    all_preds = torch.cat(all_preds).numpy()
+
+    print("\n" + "="*40)
+    print(f"RESULTS FOR FULL ABLATION (x'n)")
+    print("="*40)
+    
+    if task == 'classification':
+        acc = accuracy_score(all_labels, all_preds)
+        f1 = f1_score(all_labels, all_preds, average='macro', zero_division=0)
+        print(f"Accuracy: {acc:.4f}")
+        print(f"Macro F1: {f1:.4f}")
+        return {'accuracy': acc, 'f1_macro': f1}
+    else:
+        mse = mean_squared_error(all_labels, all_preds)
+        mae = mean_absolute_error(all_labels, all_preds)
+        r2 = r2_score(all_labels, all_preds)
+        print(f"MAE:  {mae:.4f}")
+        print(f"RMSE: {np.sqrt(mse):.4f}")
+        print(f"R2:   {r2:.4f}")
+        return {'mae': mae, 'rmse': np.sqrt(mse), 'r2': r2}
+
 
 # --- 3.1: 共享基线函数 (已修正形状错误) ---
 def compute_mean_embeddings(adapter: ModelAdapter, 
@@ -650,14 +717,23 @@ def load_and_run_from_checkpoint(checkpoints:str):
         BASELINE_FILE_PATH  # <-- 传入文件路径
     )
     
-    run_ablation_analysis(
-        adapter, test_loader_ablation, DEVICE,
-        img_baseline, tab_baseline, task=hparams.task
-    )
+    # run_ablation_analysis(
+    #     adapter, test_loader_ablation, DEVICE,
+    #     img_baseline, tab_baseline, task=hparams.task
+    # )
     
-    run_ig_analysis_on_dataset(
-        adapter, test_loader_ig, DEVICE,
-        img_baseline, tab_baseline, task=hparams.task
+    # run_ig_analysis_on_dataset(
+    #     adapter, test_loader_ig, DEVICE,
+    #     img_baseline, tab_baseline, task=hparams.task
+    # )
+
+    x_prime_n_metrics = calculate_full_ablation_performance(
+        adapter, 
+        test_loader_ablation, 
+        DEVICE, 
+        img_baseline, 
+        tab_baseline, 
+        task=hparams.task
     )
     
     print("\n\n--- Full Analysis Complete ---")
@@ -668,7 +744,15 @@ if __name__ == "__main__":
     print("\n--- 脚本已准备就绪 ---")
 
     checkpoints_path = [
-        '/home/jiazy/mytip/checkpoint_best_acc.ckpt',
+        # '/home/jiazy/mytip/results/runs/Concat_lr_1e-4_los_1214_1143/checkpoint_best_mae.ckpt',
+        '/home/jiazy/mytip/results/runs/DAFT_lr_1e-3_los_1214_1159/checkpoint_best_mae.ckpt',
+        # '/home/jiazy/mytip/results/runs/MAX_lr_1e-3_los_1214_1050/checkpoint_best_mae.ckpt',
+        # '/home/jiazy/mytip/results/runs/eval/MAX_lr_1e-3_los_1214_1050/checkpoint_best_mae.ckpt',
+        # '/home/jiazy/mytip/results/runs/eval/Concat_lr_1e-4_los_1214_1143/checkpoint_best_mae.ckpt',
+        # '/home/jiazy/mytip/results/runs/eval/DAFT_lr_1e-3_los_1214_1159/checkpoint_best_mae.ckpt',
+        # '/home/jiazy/mytip/results/runs/eval/MAX_lr_1e-4_rr_1214_1342/checkpoint_best_mae.ckpt',
+        # '/home/jiazy/mytip/results/runs/eval/Concat_lr_1e-4_rr_1214_1409/checkpoint_best_mae.ckpt',
+        # '/home/jiazy/mytip/results/runs/eval/DAFT_lr_1e-3_rr_1214_1427/checkpoint_best_mae.ckpt',
     ]
     for checkpoint in checkpoints_path:
         load_and_run_from_checkpoint(checkpoint)
