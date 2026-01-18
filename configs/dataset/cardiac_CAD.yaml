@@ -38,7 +38,7 @@ labels_val: cardiac_labels_CAD_val.pt
 data_train_eval_tabular: cardiac_features_train_imputed_noOH_tabular_imaging_reordered.csv
 data_train_eval_imaging: cardiac_train_paths_imaging.pt
 labels_train_eval_imaging: cardiac_labels_CAD_train.pt
-labels_train_eval_tabular: ccardiac_labels_CAD_train.pt
+labels_train_eval_tabular: cardiac_labels_CAD_train.pt
 
 # balanced val
 # data_val_eval_tabular: cardiac_features_val_imputed_noOH_tabular_imaging_CAD_balanced_reordered.csv
