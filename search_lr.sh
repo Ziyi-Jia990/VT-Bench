@@ -5,7 +5,7 @@
 # 您的候选学习率列表 (用空格隔开)
 # LR_LIST="1e-3 1e-4 1e-5"
 LR_LIST="1e-3"
-MODEL_LIST="MUL MAX Concat DAFT image"
+MODEL_LIST="MUL MAX"
 # MODEL_LIST="image"
 
 
@@ -23,8 +23,8 @@ do
     do
         # 为这次运行创建一个唯一的实验名称
         # 您的 run.py 会读取这个 exp_name 并用它来创建日志文件夹
-        RUN_NAME="_${MODEL}_CAD_lr_${LR}"
-        CONFIG_NAME="config_cardiac_CAD_${MODEL}.yaml"
+        RUN_NAME="_${MODEL}_Infarction_lr_${LR}"
+        CONFIG_NAME="config_cardiac_Infarction_${MODEL}.yaml"
         
         echo "-----------------------------------------------------"
         echo "开始运行: LR = $LR"

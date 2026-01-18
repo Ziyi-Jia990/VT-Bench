@@ -65,7 +65,7 @@ class ContrastiveReconstructImagingAndTabularDataset(Dataset):
     self.live_loading = live_loading
     self.augmentation_speedup = augmentation_speedup
    
-    self.dataset_name = target
+    self.dataset_name = target.lower()
     # self.dataset_name = data_path_tabular.split('/')[-1].split('_')[0]
 
     if self.delete_segmentation:
@@ -80,7 +80,7 @@ class ContrastiveReconstructImagingAndTabularDataset(Dataset):
           A.Lambda(name='convert2tensor', image=convert_to_ts)
         ])
         print(f'Using dvm transform for default transform in ContrastiveReconstructImagingAndTabularDataset')
-      elif self.dataset_name == 'cardiac':
+      elif self.dataset_name in ['cardiac', 'cad', 'infarction']:
         self.default_transform = A.Compose([
           A.Resize(height=img_size, width=img_size),
           A.Lambda(name='convert2tensor', image=convert_to_ts_01)
@@ -174,6 +174,8 @@ class ContrastiveReconstructImagingAndTabularDataset(Dataset):
     
     # Classifier
     self.labels = torch.load(labels_path)
+    if not isinstance(self.labels, torch.Tensor):
+      self.labels = torch.as_tensor(np.asarray(self.labels))
 
     assert len(self.data_imaging) == len(self.data_tabular) == len(self.labels)
   
@@ -376,10 +378,12 @@ class ContrastiveReconstructImagingAndTabularDataset(Dataset):
 
       # ---- 4) label ----
       # label = self.labels[index].clone().detach().to(torch.long)
-      if self.task == 'regression':
-          label = self.labels[index].clone().detach().to(torch.float) # 回归必须是 float
+      x = self.labels[index]  # 现在肯定是 Tensor
+
+      if self.task == "regression":
+          label = x.to(torch.float32)   # 或 torch.float
       else:
-          label = self.labels[index].clone().detach().to(torch.long)  # 分类通常是 long
+          label = x.to(torch.long)
 
       # ---- 5) unaugmented_tabular 给在线评估用，同样要重排 ----
       unaugmented_tabular = torch.tensor(subj_np, dtype=torch.float)

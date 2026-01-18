@@ -132,7 +132,7 @@ def grab_image_augmentations(img_size: int, target: str, augmentation_speedup: b
         print('Using dvm transform for train augmentation')
     
     # ================= CARDIAC =================
-    elif target == 'cardiac':
+    elif target in ['cardiac','cad', 'infarction']:
         if augmentation_speedup:
             transform = A.Compose([
                 A.HorizontalFlip(p=0.5),

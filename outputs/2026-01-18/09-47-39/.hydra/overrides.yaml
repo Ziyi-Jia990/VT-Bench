@@ -1,0 +1,3 @@
+- exp_name=pretrain_Infarction_TIP
+- use_wandb=False
+- max_epochs=1

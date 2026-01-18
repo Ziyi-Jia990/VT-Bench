@@ -58,7 +58,7 @@ class ContrastiveImagingAndTabularDataset(Dataset):
     self.live_loading = live_loading
     self.augmentation_speedup = augmentation_speedup
     # self.dataset_name = data_path_tabular.split('/')[-1].split('_')[0]
-    self.dataset_name = target
+    self.dataset_name = target.lower()
 
     if self.delete_segmentation:
       for im in self.data_imaging:
@@ -71,7 +71,7 @@ class ContrastiveImagingAndTabularDataset(Dataset):
           A.Lambda(name='convert2tensor', image=convert_to_ts)
         ])
         print(f'Using dvm transform for default transform in ContrastiveImagingAndTabularDataset')
-      elif self.dataset_name == 'cardiac':
+      elif self.dataset_name in ['cardiac', 'cad', 'infarction']:
         self.default_transform = A.Compose([
           A.Resize(height=img_size, width=img_size),
           A.Lambda(name='convert2tensor', image=convert_to_ts_01)
@@ -152,6 +152,9 @@ class ContrastiveImagingAndTabularDataset(Dataset):
     
     # Classifier
     self.labels = torch.load(labels_path)
+    if not isinstance(self.labels, torch.Tensor):
+      self.labels = torch.as_tensor(np.asarray(self.labels))
+    
   
   def read_and_parse_csv(self, path_tabular: str) -> List[List[float]]:
     """
@@ -251,10 +254,12 @@ class ContrastiveImagingAndTabularDataset(Dataset):
       tabular_views = [self.one_hot_encode(tv) for tv in tabular_views]
     # label = torch.tensor(self.labels[index], dtype=torch.long)
     # --- [修改] 根据任务类型转换 Label ---
-    if self.task == 'regression':
-        label = self.labels[index].clone().detach().to(torch.float)
+    x = self.labels[index]  # 现在肯定是 Tensor
+
+    if self.task == "regression":
+        label = x.to(torch.float32)   # 或 torch.float
     else:
-        label = self.labels[index].clone().detach().to(torch.long)
+        label = x.to(torch.long)
         
     return imaging_views, tabular_views, label, unaugmented_image
 
