@@ -68,39 +68,73 @@ class ImageDataset(Dataset):
         self.img_paths = torch.load(paths_pt)
         self.labels = torch.load(labels_pt)
         self.transform = transform
-        
+
         if isinstance(self.labels, torch.Tensor):
-            self.labels = self.labels.numpy()
+            self.labels = self.labels.cpu().numpy()
 
     def __len__(self):
         return len(self.img_paths)
 
+    def _npy_to_pil_rgb(self, img_array: np.ndarray) -> Image.Image:
+        """
+        把 npy 读出来的 array 转成 PIL RGB，方便走 torchvision transforms 做 224 resize/crop。
+        支持 (H,W), (H,W,1), (H,W,3), (C,H,W) 且 C=1/3。
+        """
+        arr = img_array
+
+        # 去掉多余维度（比如 (H,W,1)）
+        if arr.ndim == 3 and arr.shape[-1] == 1:
+            arr = arr[:, :, 0]
+
+        # (C,H,W) -> (H,W,C)
+        if arr.ndim == 3 and arr.shape[0] in (1, 3) and arr.shape[-1] not in (1, 3):
+            arr = np.transpose(arr, (1, 2, 0))
+
+        # 灰度 (H,W) -> (H,W,3)
+        if arr.ndim == 2:
+            arr = np.stack([arr, arr, arr], axis=-1)
+
+        # 单通道 (H,W,1) -> (H,W,3)
+        if arr.ndim == 3 and arr.shape[-1] == 1:
+            arr = np.repeat(arr, 3, axis=-1)
+
+        # 保证是 float
+        arr = arr.astype(np.float32)
+
+        # 把数值压到 [0,255] 以构造 PIL（这里尽量做得稳健）
+        # 如果你的 npy 本来就是 0~1：乘255
+        # 如果本来是 0~255：保持
+        # 否则做 min-max 归一化
+        a_min, a_max = float(arr.min()), float(arr.max())
+        if a_max <= 1.0 and a_min >= 0.0:
+            arr = arr * 255.0
+        elif a_max > 255.0 or a_min < 0.0:
+            eps = 1e-6
+            arr = (arr - a_min) / (a_max - a_min + eps) * 255.0
+
+        arr = np.clip(arr, 0, 255).astype(np.uint8)
+
+        return Image.fromarray(arr, mode="RGB")
+
     def __getitem__(self, idx):
         img_path = self.img_paths[idx]
         label = self.labels[idx]
-        
-        # --- 针对 .npy 文件的特殊处理 ---
-        if img_path.endswith('.npy'):
-            # 1. 直接加载 numpy 数组
+
+        if str(img_path).endswith(".npy"):
             img_array = np.load(img_path)
-            # 2. 转换为 torch.Tensor
-            image = torch.from_numpy(img_array).float()
-            
-            # 3. 维度检查
-            # 如果 .npy 存的是 (H, W, C)，需要转为 ViT 要求的 (C, H, W)
-            if image.shape[-1] == 3 and image.ndim == 3:
-                image = image.permute(2, 0, 1)
-            
-            # 注意：因为已经归一化过了，这里不再应用 self.transform
-            # 如果你的 .npy 只是缩放了但没转成 C,H,W，上面的 permute 就很重要
-        
-        # --- 针对普通图像文件的处理 ---
-        else:
-            image = Image.open(img_path).convert('RGB')
-            if self.transform:
+            image = self._npy_to_pil_rgb(img_array)
+
+            if self.transform is not None:
                 image = self.transform(image)
-        
-        return image, torch.tensor(label)
+            else:
+                # 没给 transform 也至少转成 tensor，避免出错
+                image = torch.from_numpy(np.array(image)).permute(2, 0, 1).float() / 255.0
+        else:
+            image = Image.open(img_path).convert("RGB")
+            if self.transform is not None:
+                image = self.transform(image)
+
+        return image, torch.tensor(label, dtype=torch.long)
     
 # --- 2. 训练与验证单轮逻辑 ---
 def train_one_epoch(model, loader, optimizer, scheduler, criterion, device, task):
@@ -203,7 +237,7 @@ def run_vit_experiment(cfg: DictConfig, train_data_info, val_data_info, seed, ta
                 criterion = nn.MSELoss() if task == 'regression' else nn.CrossEntropyLoss()
 
                 # 为当前超参组合定义唯一的保存路径
-                current_ckpt_path = f"/mnt/hdd/jiazy/checkpoint/{target}/vit_s{seed}_lr{lr}_wd{wd}_ep{max_epochs}.pth"
+                current_ckpt_path = f"/data1/jiazy/checkpoint/{target}/vit_s{seed}_lr{lr}_wd{wd}_ep{max_epochs}.pth"
                 
                 early_stopper = EarlyStopping(
                     patience=5, 

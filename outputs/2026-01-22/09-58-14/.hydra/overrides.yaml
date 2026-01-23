@@ -1,0 +1,8 @@
+- pretrain=False
+- evaluate=True
+- checkpoint=/data1/jiazy/mytip/results/runs/multimodal/pretrain_Infarction_MMCL_Infarction_0122_0141/checkpoint_last_epoch_499.ckpt
+- exp_name=Infarction_MMCL_seed_2023
+- max_epochs=500
+- lr_eval=1e-3
+- use_wandb=False
+- seed=2023

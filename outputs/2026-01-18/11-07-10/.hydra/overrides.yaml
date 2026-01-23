@@ -1,0 +1,7 @@
+- pretrain=False
+- evaluate=True
+- checkpoint=/data1/jiazy/mytip/results/runs/multimodal/pretrain_Infarction_TIP_Infarction_0118_1100/checkpoint_last_epoch_00.ckpt
+- exp_name=Infarction_TIP_lr_1e-3
+- max_epochs=1
+- lr_eval=1e-3
+- use_wandb=False

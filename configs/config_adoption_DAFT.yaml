@@ -70,10 +70,6 @@ pretrained_imaging_strategy: trainable
 multiple_lr: False
 
 batch_size: 512
-# biobank
-# weight_decay: 1.e-4
-# lr_eval: 1.e-3
-# DVM 
 lr: 3.e-4
 lr_eval: 1.e-4
 weight_decay: 1.5e-6

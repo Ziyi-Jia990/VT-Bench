@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - models: resnet50
+  - models: transformer
   - dataset: breast_cancer
 
 comment: None
@@ -28,9 +28,9 @@ wandb_entity: siyiwind
 data_base: /mnt/hdd/jiazy/cbis-ddsm-breast-cancer-image-dataset/features
 num_workers: 3
 
-algorithm_name: TIP
-strategy: tip
-dataset_name: dvm
+algorithm_name: Tabular
+strategy: Tabular
+dataset_name: breast_cancer
 exp_name: NA
 
 
@@ -118,8 +118,8 @@ vec2vec: False
 checkpoint_vec2vec: 
 
 checkpoint: 
-datatype: multimodal
-eval_datatype: multimodal
+datatype: tabular
+eval_datatype: tabular
 
 # General
 seed: 2022

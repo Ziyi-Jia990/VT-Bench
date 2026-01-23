@@ -1,0 +1,4 @@
+- exp_name=pretrain_Infarction_TIP_2024
+- use_wandb=False
+- max_epochs=500
+- seed=2024

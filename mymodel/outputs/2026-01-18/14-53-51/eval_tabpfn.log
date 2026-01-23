@@ -1,0 +1,3 @@
+[2026-01-18 14:53:52,825][tabpfn.model_loading][INFO] - Downloading model to /data0/jiazy/.cache/tabpfn/tabpfn-v2.5-classifier-v2.5_default.ckpt.
+[2026-01-18 14:53:52,900][tabpfn.model_loading][INFO] - Attempting HuggingFace download: tabpfn-v2.5-classifier-v2.5_default.ckpt
+[2026-01-18 14:53:54,876][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Prior-Labs/tabpfn_2_5/resolve/main/tabpfn-v2.5-classifier-v2.5_default.ckpt "HTTP/1.1 403 Forbidden"

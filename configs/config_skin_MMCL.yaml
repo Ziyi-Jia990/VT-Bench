@@ -69,13 +69,6 @@ multiple_lr: False
 
 batch_size: 256
 lr: 3.e-4
-# biobank
-# lr_eval: 1.e-3
-# weight_decay: 1.e-4
-# DVM 
-# lr_eval: 1.e-4
-# weight_decay: 1.5e-6
-# Breast Cancer
 lr_eval: 1.e-4
 weight_decay: 1.e-5
 weight_decay_eval: 0

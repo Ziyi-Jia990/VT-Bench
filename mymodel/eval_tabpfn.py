@@ -39,41 +39,65 @@ def load_data(cfg: DictConfig):
     """
     (重构版 - 基于 field_lengths 自动判断列类型)
     """
+    import sys
+    import numpy as np
+    import pandas as pd
+    import torch
+
     target = cfg.target
     print(f"[INFO] 正在加载 target: {target} (自动推断列类型)")
+
+    def to_numpy(x):
+        """把 torch.Tensor / numpy.ndarray / list 等统一转成 numpy.ndarray"""
+        if isinstance(x, torch.Tensor):
+            return x.detach().cpu().numpy()
+        if isinstance(x, np.ndarray):
+            return x
+        return np.asarray(x)
+
+    def postprocess_y(y_np, task: str):
+        """按任务类型统一 y 的 dtype/shape"""
+        y_np = to_numpy(y_np)
+
+        if task == "regression":
+            # 回归：float32，保留原 shape（常见为 (N,) 或 (N,1)）
+            return y_np.astype(np.float32)
+
+        # 分类：希望是 (N,) 的 int64
+        y_np = y_np
+        if y_np.ndim > 1 and y_np.shape[-1] == 1:
+            y_np = y_np.reshape(-1)
+
+        # 如果标签被存成 float（0.0/1.0/2.0），转成 int 更稳
+        if np.issubdtype(y_np.dtype, np.floating):
+            y_np = y_np.astype(np.int64)
+        else:
+            y_np = y_np.astype(np.int64, copy=False)
+
+        return y_np
 
     try:
         # --- 1. 加载数据 ---
         X_train_full = pd.read_csv(cfg.data_train_eval_tabular, header=None)
-        y_train_tensor = torch.load(cfg.labels_train_eval_tabular)
-        
-        # [修改] 回归任务保持 float，分类任务转 numpy
-        if cfg.task == 'regression':
-            y_train_full = y_train_tensor.float().numpy()
-        else:
-            y_train_full = y_train_tensor.numpy()
+        y_train_obj = torch.load(cfg.labels_train_eval_tabular, weights_only=False)
+        y_train_full = postprocess_y(y_train_obj, cfg.task)
 
         X_test_full = pd.read_csv(cfg.data_test_eval_tabular, header=None)
-        y_test_tensor = torch.load(cfg.labels_test_eval_tabular)
-        
-        if cfg.task == 'regression':
-            y_test_full = y_test_tensor.float().numpy()
-        else:
-            y_test_full = y_test_tensor.numpy()
+        y_test_obj = torch.load(cfg.labels_test_eval_tabular, weights_only=False)
+        y_test_full = postprocess_y(y_test_obj, cfg.task)
 
         # --- 2. 加载 field_lengths 并计算索引 ---
         field_lengths_path = cfg.field_lengths_tabular
         print(f"[INFO] 读取字段长度文件: {field_lengths_path}")
-        
+
         try:
-            field_lengths = torch.load(field_lengths_path)
-            if isinstance(field_lengths, torch.Tensor):
-                field_lengths = field_lengths.cpu().numpy()
+            field_lengths_obj = torch.load(field_lengths_path, weights_only=False)
+            field_lengths = to_numpy(field_lengths_obj)
         except Exception:
             field_lengths = np.load(field_lengths_path)
-        
+
         field_lengths = np.array(field_lengths).flatten()
-        
+
         n_cols_data = X_train_full.shape[1]
         n_cols_lengths = len(field_lengths)
         if n_cols_data != n_cols_lengths:
@@ -82,7 +106,7 @@ def load_data(cfg: DictConfig):
 
         con_indices = [i for i, fl in enumerate(field_lengths) if fl == 1]
         cat_indices = [i for i, fl in enumerate(field_lengths) if fl > 1]
-        
+
         print(f"[INFO] 自动检测结果:")
         print(f"      - 数值列数量: {len(con_indices)}")
         print(f"      - 类别列数量: {len(cat_indices)}")
@@ -96,10 +120,10 @@ def load_data(cfg: DictConfig):
         cat_cols = [all_col_names[i] for i in cat_indices]
 
         # --- 4. 标签处理 (1-indexed -> 0-indexed) ---
-        # [修改] 只有分类任务才执行此操作
-        if cfg.task == 'classification':
-            label_min = np.min(y_train_full)
-            label_max = np.max(y_train_full)
+        # 只有分类任务才执行
+        if cfg.task == "classification":
+            label_min = int(np.min(y_train_full)) if y_train_full.size > 0 else 0
+            label_max = int(np.max(y_train_full)) if y_train_full.size > 0 else 0
             if label_min == 1 and label_max == cfg.num_classes:
                 print(f"    [!] 警告：检测到 1-indexed 标签，正在修复...")
                 y_train_full = y_train_full - 1
@@ -113,8 +137,13 @@ def load_data(cfg: DictConfig):
 
         if num_cols:
             for col in num_cols:
-                X_train_full[col] = pd.to_numeric(X_train_full[col], errors='coerce').fillna(0)
-                X_test_full[col] = pd.to_numeric(X_test_full[col], errors='coerce').fillna(0)
+                X_train_full[col] = pd.to_numeric(X_train_full[col], errors="coerce").fillna(0)
+                X_test_full[col] = pd.to_numeric(X_test_full[col], errors="coerce").fillna(0)
+
+        # （可选）调试输出，确认类型和形状，确认没问题后可删
+        print(f"[DEBUG] X_train: {X_train_full.shape}, y_train: {y_train_full.shape}, {y_train_full.dtype}")
+        print(f"[DEBUG] X_test : {X_test_full.shape}, y_test : {y_test_full.shape}, {y_test_full.dtype}")
+        print(f"[DEBUG] num_cols={len(num_cols)}, cat_cols={len(cat_cols)}")
 
         return X_train_full, y_train_full, X_test_full, y_test_full, num_cols, cat_cols
 
@@ -123,6 +152,7 @@ def load_data(cfg: DictConfig):
         import traceback
         traceback.print_exc()
         sys.exit(1)
+
 
 def build_preprocess(num_cols, cat_cols):
     transformers = []
@@ -225,8 +255,8 @@ def main(cfg: DictConfig):
                 if key in cfg and cfg[key] and not os.path.isabs(cfg[key]):
                     cfg[key] = os.path.join(data_root, cfg[key])
 
-        TRAIN_SAMPLE_THRESHOLD = cfg.get('train_sample_max', 8000)
-        TEST_SAMPLE_THRESHOLD = cfg.get('test_sample_max', 2000)
+        TRAIN_SAMPLE_THRESHOLD = cfg.get('train_sample_max', 10000)
+        TEST_SAMPLE_THRESHOLD = cfg.get('test_sample_max', 10000)
 
         # 1. 加载数据
         X_train_full, y_train_full, X_test_full, y_test_full, num_cols, cat_cols = load_data(cfg)

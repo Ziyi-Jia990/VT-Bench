@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - models: resnet50
+  - models: transformer
   - dataset: pawpularity
 
 comment: None
@@ -118,8 +118,8 @@ vec2vec: False
 checkpoint_vec2vec: 
 
 checkpoint: 
-datatype: multimodal
-eval_datatype: multimodal
+datatype: tabular
+eval_datatype: tabular
 
 # General
 seed: 2022

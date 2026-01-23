@@ -92,24 +92,38 @@ def load_and_preprocess_data(cfg: DictConfig, batch_size: int):
         sys.exit(1)
 
     # --- 4. 拆分特征并转换为 Tensors ---
-    def split_and_convert_to_tensors(df, y_tensor):
-        X_num_df = df.iloc[:, con_indices]
-        X_cat_df = df.iloc[:, cat_indices]
-        
-        if len(con_indices) > 0:
-            X_num_tensor = torch.tensor(X_num_df.values.astype(np.float32))
-        else:
-            X_num_tensor = None 
+    def split_and_convert_to_tensors(df, y):
+        # 数值/类别特征拆分
+        X_num_df = df.iloc[:, con_indices] if len(con_indices) > 0 else None
+        X_cat_df = df.iloc[:, cat_indices] if len(cat_indices) > 0 else None
 
-        X_cat_tensor = torch.tensor(X_cat_df.values.astype(np.int64))
-        
-        # 标签处理
-        if cfg.task == 'classification':
-            y_tensor = y_tensor.long()
+        # 数值特征 -> float32
+        if X_num_df is not None:
+            X_num_tensor = torch.as_tensor(X_num_df.to_numpy(), dtype=torch.float32)
         else:
-            y_tensor = y_tensor.float()
+            X_num_tensor = None
+
+        # 类别特征 -> int64（若没有类别列，返回 None）
+        if X_cat_df is not None:
+            X_cat_tensor = torch.as_tensor(X_cat_df.to_numpy(), dtype=torch.long)
+        else:
+            X_cat_tensor = None
+
+        # 标签 -> 按任务类型转 dtype（关键修复：先转成 Tensor）
+        if isinstance(y, torch.Tensor):
+            y_tensor = y.detach().cpu()
+        else:
+            y_tensor = torch.as_tensor(np.asarray(y))
+
+        y_tensor = y_tensor.reshape(-1)  # 保证是 (N,)
+
+        if cfg.task == "classification":
+            y_tensor = y_tensor.to(torch.long)
+        else:
+            y_tensor = y_tensor.to(torch.float32)
 
         return X_num_tensor, X_cat_tensor, y_tensor
+
 
     print("    正在根据 field_lengths 拆分并转换数据...")
     

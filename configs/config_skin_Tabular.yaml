@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - models: resnet50
+  - models: transformer
   - dataset: skin_cancer
 
 comment: None

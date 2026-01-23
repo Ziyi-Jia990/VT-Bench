@@ -717,15 +717,15 @@ def load_and_run_from_checkpoint(checkpoints:str):
         BASELINE_FILE_PATH  # <-- 传入文件路径
     )
     
-    # run_ablation_analysis(
-    #     adapter, test_loader_ablation, DEVICE,
-    #     img_baseline, tab_baseline, task=hparams.task
-    # )
+    run_ablation_analysis(
+        adapter, test_loader_ablation, DEVICE,
+        img_baseline, tab_baseline, task=hparams.task
+    )
     
-    # run_ig_analysis_on_dataset(
-    #     adapter, test_loader_ig, DEVICE,
-    #     img_baseline, tab_baseline, task=hparams.task
-    # )
+    run_ig_analysis_on_dataset(
+        adapter, test_loader_ig, DEVICE,
+        img_baseline, tab_baseline, task=hparams.task
+    )
 
     x_prime_n_metrics = calculate_full_ablation_performance(
         adapter, 
@@ -745,7 +745,7 @@ if __name__ == "__main__":
 
     checkpoints_path = [
         # '/home/jiazy/mytip/results/runs/Concat_lr_1e-4_los_1214_1143/checkpoint_best_mae.ckpt',
-        '/home/jiazy/mytip/results/runs/DAFT_lr_1e-3_los_1214_1159/checkpoint_best_mae.ckpt',
+        '/data1/jiazy/mytip/results/runs/eval/Infarction_TIP_lr_1e-3_Infarction_0120_0143/checkpoint_best_auc.ckpt',
         # '/home/jiazy/mytip/results/runs/MAX_lr_1e-3_los_1214_1050/checkpoint_best_mae.ckpt',
         # '/home/jiazy/mytip/results/runs/eval/MAX_lr_1e-3_los_1214_1050/checkpoint_best_mae.ckpt',
         # '/home/jiazy/mytip/results/runs/eval/Concat_lr_1e-4_los_1214_1143/checkpoint_best_mae.ckpt',
