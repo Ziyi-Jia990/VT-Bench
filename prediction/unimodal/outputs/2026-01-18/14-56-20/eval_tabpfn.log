@@ -1,0 +1,7 @@
+[2026-01-18 14:56:23,293][tabpfn.model_loading][INFO] - Downloading model to /data0/jiazy/.cache/tabpfn/tabpfn-v2.5-classifier-v2.5_default.ckpt.
+[2026-01-18 14:56:23,370][tabpfn.model_loading][INFO] - Attempting HuggingFace download: tabpfn-v2.5-classifier-v2.5_default.ckpt
+[2026-01-18 14:56:24,301][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Prior-Labs/tabpfn_2_5/resolve/main/tabpfn-v2.5-classifier-v2.5_default.ckpt "HTTP/1.1 302 Found"
+[2026-01-18 14:56:24,634][httpx][INFO] - HTTP Request: GET https://huggingface.co/api/models/Prior-Labs/tabpfn_2_5/xet-read-token/1821146e96f770e5a1440becd59f1a7703ec0b87 "HTTP/1.1 200 OK"
+[2026-01-18 14:56:31,513][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/Prior-Labs/tabpfn_2_5/resolve/main/config.json "HTTP/1.1 200 OK"
+[2026-01-18 14:56:31,923][httpx][INFO] - HTTP Request: GET https://huggingface.co/Prior-Labs/tabpfn_2_5/resolve/main/config.json "HTTP/1.1 200 OK"
+[2026-01-18 14:56:31,926][tabpfn.model_loading][INFO] - Successfully downloaded to /data0/jiazy/.cache/tabpfn/tabpfn-v2.5-classifier-v2.5_default.ckpt
