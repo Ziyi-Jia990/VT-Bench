@@ -71,7 +71,7 @@ python run.py --task prediction --dataset skin --model TIP --setting none --diag
 
 #### Example: Generative Reasoning
 ```bash
-python run.py --task reasoning --dataset ehrxqa --model qwen3-vl-8b-instruct --setting full --diagnostics none
+python run.py --task reasoning --dataset ehrxqa --model Qwen/Qwen3-VL-8B-Instruct --setting full --diagnostics none
 ```
 
 For API Models (GPT-4.1 / Gemini-3-Flash-Preview), please export API keys before running:

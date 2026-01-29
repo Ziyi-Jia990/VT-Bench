@@ -120,7 +120,7 @@ def run(args: DictConfig):
     print(f'Target is {args.target}')
     print('=================================================================================\n')
     torch.cuda.empty_cache()
-    evaluate(args, wandb_logger)
+    args.checkpoint = evaluate(args, wandb_logger)
 
   wandb.finish()
   del wandb_logger
@@ -130,7 +130,7 @@ def run(args: DictConfig):
   print('Total running time: {:.0f}h {:.0f}m'.
       format(time_elapsed // 3600, (time_elapsed % 3600)//60))
   
-  return args.chekpoint 
+  return args.checkpoint 
 
 @property
 def exception(self):

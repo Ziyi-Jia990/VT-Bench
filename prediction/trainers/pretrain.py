@@ -1,5 +1,6 @@
 import os 
 import sys
+import glob
 
 from torch import cuda
 from torch.utils.data import DataLoader
@@ -196,7 +197,18 @@ def pretrain(hparams, wandb_logger):
     # 3. 获取并返回路径
     # best_model_path: 如果你设置了 monitor，这里会是表现最好的模型路径
     # kpt_callback.last_model_path: 则是最后保存的那个模型路径
-    final_ckpt_path = ckpt_callback.last_model_path
+    # 方法 A: 尝试获取 Lightning 记录的最佳路径（在没有 monitor 时，它指向最后一次保存的路径）
+    final_ckpt_path = ckpt_callback.best_model_path
+    
+    # 方法 B: 针对 {epoch:02d} 的兜底逻辑。
+    # 因为 Lightning 的 epoch 是从 0 开始计数的，所以 max_epochs=10 时，最后的文件通常是 epoch=09
+    if not final_ckpt_path or not os.path.exists(final_ckpt_path):
+        # 扫描 logdir 下所有符合模式的 .ckpt 文件
+        pattern = os.path.join(logdir, "checkpoint_last_epoch_*.ckpt")
+        ckpts = glob.glob(pattern)
+        if ckpts:
+            # 找到文件名中 epoch 数字最大的那一个
+            final_ckpt_path = max(ckpts, key=os.path.getmtime)
     
     print(f"✅ Training finished. Final checkpoint saved at: {final_ckpt_path}")
     

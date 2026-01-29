@@ -10,6 +10,7 @@ from torch.utils.data.sampler import WeightedRandomSampler
 from torch import cuda
 import pandas as pd
 import numpy as np
+import glob
 
 from datasets.ImageDataset import ImageDataset
 from datasets.TabularDataset import TabularDataset
@@ -142,7 +143,14 @@ def evaluate(hparams, wandb_logger):
   eval_df.to_csv(join(logdir, 'eval_results.csv'), index=False)
   
   wandb_logger.log_metrics({f'best.val.{hparams.eval_metric}': model.best_val_score})
-
+  final_ckpt_path = None
+    
+  if not final_ckpt_path or not os.path.exists(final_ckpt_path):
+      # 兜底方案：物理扫描文件夹
+      expected_pattern = os.path.join(logdir, f"checkpoint_best_{hparams.eval_metric}*.ckpt")
+      ckpts = glob.glob(expected_pattern)
+      if ckpts:
+          final_ckpt_path = max(ckpts, key=os.path.getmtime)
 
   if hparams.test_and_eval:
     
@@ -191,3 +199,5 @@ def evaluate(hparams, wandb_logger):
     test_results = trainer.test(model, test_loader, ckpt_path=os.path.join(logdir,f'checkpoint_best_{hparams.eval_metric}.ckpt'))
     df = pd.DataFrame(test_results)
     df.to_csv(join(logdir, 'test_results.csv'), index=False)
+
+    return final_ckpt_path
