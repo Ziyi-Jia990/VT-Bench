@@ -95,7 +95,7 @@ export GOOGLE_API_KEY='your_google_api_key'
 |---|---|---|---| 
 |Skin Cancer      | `skin`            | Public| [kaggle]( https://www.kaggle.com/datasets/mahdavi1202/skin-cancer)|
 |Breast Cancer    | `breast`         | Public| [kaggle]( https://www.kaggle.com/datasets/awsaf49/cbis-ddsm-breast-cancer-image-dataset)|
-|Infarction       | `Infarction`      | Public Credentialized Access |[UK Biobank](https://www.ukbiobank.ac.uk/enable-your-research/apply-for-access)
+|Infarction       | `Infarction`      | Public Credentialized Access |[UK Biobank](https://www.ukbiobank.ac.uk/enable-your-research/apply-for-access) |
 |Adoption         | `adoption`        | Public| [kaggle](https://www.kaggle.com/competitions/petfinder-adoption-prediction)|
 |CelebA           | `celebA`          | Public| [kaggle](https://www.kaggle.com/datasets/jessicali9530/celeba-dataset)|
 |DVM-Car          | `dvm`             | Public| [DVM-Car](https://deepvisualmarketing.github.io/)|
@@ -133,6 +133,13 @@ All preprocessing scripts for prediction datasets are under [dataset/](https://a
 
 ### Generative Reasoning Datasets
 
+
+| Dataset         | String Identifier | Availability                 | Source |
+|---|---|---|---| 
+|DVM-Car QA      | `dvm`            | Constructed | [kaggle]( https://www.kaggle.com/datasets/mahdavi1202/skin-cancer)|
+|MMQA            | `mmqa`           | Public      | [MMQA](https://allenai.github.io/multimodalqa/)|
+|EHRXQA          | `ehrxqa`         | Public Credentialized Access |[EHRXQA](https://github.com/baeseongsu/ehrxqa.git) |
+
 #### DVM-Car QA
 
 * Generation script: [reasoning/DVM_QA/generate_qa.py](https://anonymous.4open.science/r/VT-Bench-13C2/VT-Bench/reasoning/DVM_QA/generate_qa.py).
@@ -158,6 +165,10 @@ Example:
 
 * See the official repo: [EHRXQA]((https://github.com/baeseongsu/ehrxqa.git))
 * Supported settings: `full` / `stage1` / `stage2`
+* Example:
+```bash
+--setting full
+```
 
 
 

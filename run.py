@@ -1,17 +1,19 @@
 import argparse
 import sys
 import os
-# 获取 run.py 所在的根目录
+import ast
+
+# Get the absolute path of the root directory where run.py is located
 root_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, root_dir)  # 使用 insert 确保优先级
+sys.path.insert(0, root_dir)  # Use insert(0) to ensure highest search priority
 
-# 获取 prediction 文件夹的路径并加入 sys.path
+# Obtain the path of the 'prediction' directory and add it to sys.path
 prediction_dir = os.path.join(root_dir, 'prediction')
-sys.path.insert(0, prediction_dir)  # 使用 insert 确保优先级
+sys.path.insert(0, prediction_dir)  # Ensure priority in the search path
 
-# 获取 reasoning 文件夹的路径并加入 sys.path
+# Obtain the path of the 'reasoning' directory and add it to sys.path
 reasoning_dir = os.path.join(root_dir, 'reasoning')
-sys.path.insert(0, reasoning_dir)  # 使用 insert 确保优先级
+sys.path.insert(0, reasoning_dir)  # Ensure priority in the search path
 
 # Imports are done lazily inside the task branches to avoid
 # loading unnecessary dependencies for the chosen task.
@@ -68,14 +70,18 @@ def main():
             print(f"Error: Could not import reasoning modules. Details: {e}")
             sys.exit(1)
 
-        # Execute reasoning evaluation logic
+        # --- NEW: Intelligent parsing of the 'setting' parameter ---
+        raw_setting = args.setting
+        try:
+            # Attempt to parse as a Python literal (e.g., convert "['loc', 'attr']" into a list)
+            parsed_setting = ast.literal_eval(raw_setting)
+        except (ValueError, SyntaxError):
+            # If parsing fails (e.g., input is "full" or "stage1"), retain it as a raw string
+            parsed_setting = raw_setting
+
         print(f"[*] Starting reasoning evaluation for model: {args.model} on dataset: {args.dataset}")
-        reasoning_evaluation(args.model, args.dataset, args.setting)
-    
-    else:
-        # Handle unsupported task types
-        print(f"Error: Unknown task type '{args.task}'")
-        sys.exit(1)
+        # Pass the parsed setting into the evaluation logic
+        reasoning_evaluation(args.model, args.dataset, parsed_setting)
 
 if __name__ == "__main__":
     main()

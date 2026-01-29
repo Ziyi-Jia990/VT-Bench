@@ -13,10 +13,10 @@ def evaluate_dvm(model_id: str, tasks: list = None, output_dir: str = "."):
 
     if is_proprietary:
         # 2. 只有在调用时才导入，提高灵活性
-        from test_proprietary import run_dvm_benchmark_api
+        from .test_proprietary import run_dvm_benchmark_api
         return run_dvm_benchmark_api(model_id, tasks=tasks, output_root=output_dir)
     else:
-        from test_open_model import evaluate_dvm_benchmark
+        from .test_open_model import evaluate_dvm_benchmark
         return evaluate_dvm_benchmark(model_id, task_types=tasks, output_dir=output_dir)
 
 if __name__ == "__main__":
