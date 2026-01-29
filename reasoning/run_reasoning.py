@@ -27,14 +27,14 @@ def reasoning_evaluation(model_id: str, dataset: str, setting):
     # 1. Route to DVM Dataset Logic
     if dataset_type == "dvm":
         print(f"[INFO] Routing to DVM Evaluation...")
-        from reasoning.DVM_QA.test_model import evaluate_dvm
+        from .reasoning.DVM_QA.test_model import evaluate_dvm
         # DVM 接收整个 list
         return evaluate_dvm(model_id=model_id, tasks=setting_list)
 
     # 2. Route to EHRXQA Dataset Logic
     elif dataset_type == "ehrxqa":
         print(f"[INFO] Routing to EHRXQA Benchmark Interface...")
-        from reasoning.ehrxqa.test_model import ehrxqa_benchmark_interface
+        from .reasoning.ehrxqa.test_model import ehrxqa_benchmark_interface
         # EHRXQA 取 list 的第一个参数 (str)
         actual_setting = setting_list[0] if setting_list else "full"
         return ehrxqa_benchmark_interface(model_id=model_id, setting=actual_setting)
@@ -42,5 +42,5 @@ def reasoning_evaluation(model_id: str, dataset: str, setting):
     # 3. Fallback for other datasets (e.g., MultimodalQA / mmqa)
     else:
         print(f"[INFO] Dataset '{dataset}' not specifically routed. Calling generic evaluate_model...")
-        from reasoning.mmqa.test_models import evaluate_model
+        from .reasoning.mmqa.test_models import evaluate_model
         return evaluate_model(model_id=model_id)
