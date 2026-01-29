@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import os
 from tqdm import tqdm
-# ================= 配置区域 =================
+# ================= Configuration Area =================
 CONFIG = {
     "MIMIC_IV_HOSP": "../physionet.org/files/mimiciv/2.2/hosp",
     "MIMIC_IV_ICU": "../physionet.org/files/mimiciv/2.2/icu",
@@ -11,22 +11,22 @@ CONFIG = {
     "TARGET_COUNT": 100000,
 }
 
-# 定义我们要提取的特征 (ItemID 字典)
-# 这些是 MIMIC-IV 中最常用的 ItemID
+# Define features to extract (ItemID dictionary)
+# These are the most commonly used ItemIDs in MIMIC-IV
 FEATURES_CONFIG = {
     'chartevents': {
         'Temperature': [223761, 223762], # F and C
         'HeartRate': [220045],
         'RespRate': [220210],
         'SpO2': [220277],
-        'SysBP': [220179, 220050], # 收缩压 (非侵入/侵入)
+        'SysBP': [220179, 220050], # Systolic blood pressure (non-invasive/invasive)
     },
     'labevents': {
-        'WBC': [51301, 51300], # 白细胞
-        'Hemoglobin': [51222], # 血红蛋白
-        'Platelet': [51265],   # 血小板
-        'Glucose': [50931],    # 血糖
-        'Creatinine': [50912]  # 肌酐 (肾功能)
+        'WBC': [51301, 51300], # White blood cell count
+        'Hemoglobin': [51222], # Hemoglobin
+        'Platelet': [51265],   # Platelet count
+        'Glucose': [50931],    # Blood glucose
+        'Creatinine': [50912]  # Creatinine (kidney function)
     }
 }
 # ===========================================
@@ -46,54 +46,54 @@ def generate_image_path(row):
 
 def extract_clinical_features(df_cohort, lookback_hours=24):
     """
-    通用函数：从 ICU 和 Hosp 表中提取临床特征 (兼容旧版 Pandas)
+    Generic function: Extract clinical features from ICU and Hosp tables (compatible with older Pandas versions)
     """
     print(f"    Extracting Clinical Features (Window: +/- {lookback_hours} hours)...")
     valid_hadms = set(df_cohort['hadm_id'].unique())
     
-    # 收集所有的 ItemID 以便过滤
+    # Collect all ItemIDs for filtering
     target_chart_ids = [item for sublist in FEATURES_CONFIG['chartevents'].values() for item in sublist]
     target_lab_ids = [item for sublist in FEATURES_CONFIG['labevents'].values() for item in sublist]
     
     extracted_data = []
 
-    # --- 1.处理 Vitals (ChartEvents) ---
+    # --- 1. Process Vitals (ChartEvents) ---
     print("    Scanning Vital Signs (Chartevents)...")
     chart_path = get_file_path(CONFIG["MIMIC_IV_ICU"], "chartevents.csv")
     chunk_size = 5000000
     
-    # 建立 ID 到名称的映射
+    # Build ID to name mapping
     item_map = {}
     for name, ids in FEATURES_CONFIG['chartevents'].items():
         for i in ids: item_map[i] = name
 
-    # 【修改点 1】去掉 with，直接赋值
+    # [Modification point 1] Remove with, assign directly
     reader = pd.read_csv(chart_path, chunksize=chunk_size, usecols=['hadm_id', 'itemid', 'charttime', 'valuenum'])
     
     for chunk in tqdm(reader, desc="    Reading Vitals"):
-        # 过滤
+        # Filter
         chunk = chunk[chunk['hadm_id'].isin(valid_hadms)]
         chunk = chunk[chunk['itemid'].isin(target_chart_ids)]
         chunk = chunk.dropna(subset=['valuenum'])
         
-        # 温度转换 (华氏度 223761 -> 摄氏度)
+        # Temperature conversion (Fahrenheit 223761 -> Celsius)
         if 223761 in chunk['itemid'].values:
             f_mask = chunk['itemid'] == 223761
             chunk.loc[f_mask, 'valuenum'] = (chunk.loc[f_mask, 'valuenum'] - 32) * 5/9
-            chunk.loc[f_mask, 'itemid'] = 223762 # 映射到摄氏度ID
+            chunk.loc[f_mask, 'itemid'] = 223762 # Map to Celsius ID
         
         if not chunk.empty:
             extracted_data.append(chunk)
 
-    # --- 2.处理 Labs (LabEvents) ---
+    # --- 2. Process Labs (LabEvents) ---
     print("    Scanning Lab Tests (Labevents)...")
     lab_path = get_file_path(CONFIG["MIMIC_IV_HOSP"], "labevents.csv")
     
-    # 更新映射
+    # Update mapping
     for name, ids in FEATURES_CONFIG['labevents'].items():
         for i in ids: item_map[i] = name
         
-    # 【修改点 2】去掉 with，直接赋值
+    # [Modification point 2] Remove with, assign directly
     reader_lab = pd.read_csv(lab_path, chunksize=chunk_size, usecols=['hadm_id', 'itemid', 'charttime', 'valuenum'])
     
     for chunk in tqdm(reader_lab, desc="    Reading Labs"):
@@ -108,36 +108,36 @@ def extract_clinical_features(df_cohort, lookback_hours=24):
         print("    Warning: No clinical features found.")
         return df_cohort
 
-    # --- 3. 合并与时间窗口过滤 ---
+    # --- 3. Merge and time window filtering ---
     print("    Merging and Aggregating Features...")
     df_features = pd.concat(extracted_data)
     df_features['charttime'] = pd.to_datetime(df_features['charttime'])
     
-    # 将特征名称映射上去
+    # Map feature names
     df_features['feature_name'] = df_features['itemid'].map(item_map)
     
-    # 连接到 Cohort (为了获取 studydatetime)
-    # 优化内存：只取必要的列
+    # Connect to Cohort (to get studydatetime)
+    # Optimize memory: only take necessary columns
     cohort_time = df_cohort[['hadm_id', 'study_id', 'studydatetime']].drop_duplicates()
     merged = pd.merge(df_features, cohort_time, on='hadm_id', how='inner')
     
-    # 计算时间差
+    # Calculate time difference
     merged['hours_diff'] = (merged['charttime'] - merged['studydatetime']).dt.total_seconds() / 3600
     
-    # 过滤时间窗口
+    # Filter time window
     merged = merged[abs(merged['hours_diff']) <= lookback_hours]
     
-    # --- 4. 透视表 (Pivoting) ---
-    # 取平均值作为特征
+    # --- 4. Pivot table ---
+    # Use mean value as feature
     df_pivot = pd.pivot_table(merged, values='valuenum', index='study_id', columns='feature_name', aggfunc='mean')
     
-    # 合并回原始数据
+    # Merge back to original data
     df_final = pd.merge(df_cohort, df_pivot, on='study_id', how='left')
     return df_final
 
 
 def split_data(df):
-    """8:1:1 划分"""
+    """8:1:1 split"""
     print("    Splitting data into train (80%), valid (10%), test (10%)...")
     subjects = df['subject_id'].unique()
     np.random.seed(42)
@@ -162,32 +162,32 @@ def split_data(df):
 
 def step_1_link_cxr_to_hadm():
     """
-    Step 1: 全量对齐
-    不再限制 limit_count，尽可能获取所有可用的图片-住院匹配对
+    Step 1: Full-scale alignment
+    No longer limit count_count, get as many available image-admission matching pairs as possible
     """
     print(">>> Step 1: Loading Metadata and Aligning CXR to Admissions (Full Scale)...")
     
     cxr_meta_path = get_file_path(CONFIG["MIMIC_CXR"], "mimic-cxr-2.0.0-metadata.csv")
     
-    # 读取所有数据
+    # Read all data
     df_cxr = pd.read_csv(cxr_meta_path, usecols=['subject_id', 'study_id', 'dicom_id', 'StudyDate', 'StudyTime', 'ViewPosition'])
     df_cxr.rename(columns={'dicom_id': 'image_id'}, inplace=True)
     
-    # 过滤 ViewPosition
+    # Filter ViewPosition
     df_cxr = df_cxr[df_cxr['ViewPosition'].isin(['AP', 'PA'])]
 
-    # 【关键修改】不再截断数据，利用你的大内存处理全量数据
-    # df_cxr = df_cxr.iloc[:limit_count]  <-- 这一行删掉或注释掉
+    # [Key modification] No longer truncate data, use your large memory to process full-scale data
+    # df_cxr = df_cxr.iloc[:limit_count]  <-- Delete or comment out this line
     print(f"    Loaded {len(df_cxr)} CXR studies candidates.")
 
-    # 处理时间
+    # Process time
     df_cxr['studydatetime'] = pd.to_datetime(
         df_cxr['StudyDate'].astype(str) + ' ' + 
         df_cxr['StudyTime'].astype(str).str.split('.').str[0].str.zfill(6),
         format='%Y%m%d %H%M%S', errors='coerce'
     )
     
-    # 读取 Transfers 对齐
+    # Read Transfers for alignment
     trans_path = get_file_path(CONFIG["MIMIC_IV_HOSP"], "transfers.csv")
     df_trans = pd.read_csv(trans_path, usecols=['subject_id', 'hadm_id', 'intime', 'outtime'])
     df_trans = df_trans.dropna(subset=['hadm_id', 'intime', 'outtime'])
@@ -209,11 +209,11 @@ def step_1_link_cxr_to_hadm():
 
 def step_3_build_pneumonia_dataset(df_aligned):
     """
-    任务 2: 肺炎预测 (严格过滤缺失值版)
+    Task 2: Pneumonia prediction (strict filtering of missing values version)
     """
     print("\n>>> Step 3: Building Pneumonia Dataset (Strict filtering)...")
     
-    # 1. 确定 Label
+    # 1. Determine Label
     diag_path = get_file_path(CONFIG["MIMIC_IV_HOSP"], "diagnoses_icd.csv")
     valid_hadms = set(df_aligned['hadm_id'].unique())
     pneumonia_hadms = set()
@@ -231,38 +231,38 @@ def step_3_build_pneumonia_dataset(df_aligned):
             
     df_aligned['target_pneumonia'] = df_aligned['hadm_id'].apply(lambda x: 1 if x in pneumonia_hadms else 0)
     
-    # 2. 补充基础人口学特征
+    # 2. Add basic demographic features
     pat_path = get_file_path(CONFIG["MIMIC_IV_HOSP"], "patients.csv")
     df_pat = pd.read_csv(pat_path, usecols=['subject_id', 'gender', 'anchor_age', 'anchor_year'])
     df_final = pd.merge(df_aligned, df_pat, on='subject_id', how='inner')
     df_final['admit_year'] = df_final['studydatetime'].dt.year
     df_final['age'] = df_final['anchor_age'] + (df_final['admit_year'] - df_final['anchor_year'])
     
-    # 【关键修改 1】移除此处的截断逻辑
-    # 我们要对所有对齐的数据进行特征提取，这样才能保证筛选后还有足够的数据
+    # [Key modification 1] Remove truncation logic here
+    # We need to perform feature extraction on all aligned data to ensure sufficient data after filtering
     print(f"    Processing all {len(df_final)} candidates for feature extraction...")
     
-    # 3. 提取丰富的临床特征 (全量)
-    # 这会消耗较多内存，但你的 64G 内存完全足以应付
+    # 3. Extract rich clinical features (full-scale)
+    # This will consume more memory, but your 64G memory is fully sufficient
     df_final = extract_clinical_features(df_final, lookback_hours=24)
     
-    # 4. 【关键修改 2】严格过滤缺失值
+    # 4. [Key modification 2] Strictly filter missing values
     print("    Filtering out rows with missing clinical features...")
     
-    # 获取所有特征列名
+    # Get all feature column names
     feature_cols = list(FEATURES_CONFIG['chartevents'].keys()) + list(FEATURES_CONFIG['labevents'].keys())
-    # 确保列都在 dataframe 里
+    # Ensure columns are in dataframe
     feature_cols = [c for c in feature_cols if c in df_final.columns]
     
     initial_len = len(df_final)
-    # 只要有任何一个特征缺失 (NaN)，就整行删除
+    # Delete entire row if any feature is missing (NaN)
     df_final = df_final.dropna(subset=feature_cols, how='any')
     
     print(f"    Dropped {initial_len - len(df_final)} rows with missing values.")
     print(f"    Remaining clean samples: {len(df_final)}")
     
-    # 5. 【关键修改 3】后置截断
-    # 只有当清洗后的数据量超过目标值时，才进行随机采样
+    # 5. [Key modification 3] Post-truncation
+    # Only perform random sampling if cleaned data exceeds target count
     if len(df_final) > CONFIG["TARGET_COUNT"]:
         print(f"    Limiting dataset to target count: {CONFIG['TARGET_COUNT']}...")
         df_final = df_final.sample(n=CONFIG["TARGET_COUNT"], random_state=42).reset_index(drop=True)
@@ -270,7 +270,7 @@ def step_3_build_pneumonia_dataset(df_aligned):
         print(f"    Warning: Only found {len(df_final)} valid samples (Target: {CONFIG['TARGET_COUNT']}).")
         print("    Tips: You can try increasing lookback_hours in extract_clinical_features.")
 
-    # 6. 生成路径和分割
+    # 6. Generate paths and split
     df_final['image_path'] = df_final.apply(generate_image_path, axis=1)
     df_final = split_data(df_final)
     
@@ -287,8 +287,8 @@ def step_3_build_pneumonia_dataset(df_aligned):
 
 
 
-# 请确保将上面的 extract_clinical_features 和 step_3 替换进原本的 build_classification.py 中
-# 别忘了运行 step_1_link_cxr_to_hadm 获取 df_aligned
+# Please ensure to replace extract_clinical_features and step_3 into the original build_classification.py
+# Don't forget to run step_1_link_cxr_to_hadm to get df_aligned
 if __name__ == "__main__":
     df_aligned = step_1_link_cxr_to_hadm()
     # step_2_build_mortality_dataset(df_aligned)

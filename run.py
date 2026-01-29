@@ -1,14 +1,19 @@
 import argparse
 import sys
+import os
+# 获取 run.py 所在的根目录
+root_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(root_dir)
 
-# Import required modules and functions
-try:
-    from reasoning.run_reasoning import reasoning_evaluation
-    from prediction.run import call_with_specific_config
-    from prediction.MCR_calculate import load_and_run_from_checkpoint
-except ImportError as e:
-    print(f"Error: Could not import modules. Please check your file paths. Details: {e}")
-    sys.exit(1)
+# 获取 prediction 文件夹的路径并加入 sys.path
+prediction_dir = os.path.join(root_dir, 'prediction')
+sys.path.append(prediction_dir)
+
+prediction_dir = os.path.join(root_dir, 'reasoning')
+sys.path.append(prediction_dir)
+
+# Imports are done lazily inside the task branches to avoid
+# loading unnecessary dependencies for the chosen task.
 
 def main():
     # 1. Initialize the argument parser
@@ -26,6 +31,13 @@ def main():
 
     # 3. Execution logic based on task type
     if args.task == "prediction":
+        try:
+            from prediction.run import call_with_specific_config
+            from prediction.MCR_calculate import load_and_run_from_checkpoint
+        except ImportError as e:
+            print(f"Error: Could not import prediction modules. Details: {e}")
+            sys.exit(1)
+
         # Generate config filename based on dataset and model
         config_name = f"config_{args.dataset}_{args.model}.yaml"
         print(f"[*] Running prediction using config: {config_name}")
@@ -49,6 +61,12 @@ def main():
                 load_and_run_from_checkpoint(checkpoints_train)
 
     elif args.task == "reasoning":
+        try:
+            from reasoning.run_reasoning import reasoning_evaluation
+        except ImportError as e:
+            print(f"Error: Could not import reasoning modules. Details: {e}")
+            sys.exit(1)
+
         # Execute reasoning evaluation logic
         print(f"[*] Starting reasoning evaluation for model: {args.model} on dataset: {args.dataset}")
         reasoning_evaluation(args.model, args.dataset, args.setting)

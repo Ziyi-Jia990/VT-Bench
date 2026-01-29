@@ -25,7 +25,7 @@ lr_finder_lrs:
 multitarget:
 
 wandb_entity: siyiwind
-data_base: /mnt/hdd/jiazy/cbis-ddsm-breast-cancer-image-dataset/features
+data_base: /data1/jiazy/tab_image_bench/cbis-ddsm-breast-cancer-image-dataset/features
 num_workers: 3
 
 algorithm_name: TIP

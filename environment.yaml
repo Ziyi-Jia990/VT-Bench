@@ -252,12 +252,12 @@ dependencies:
   - pyrsistent=0.19.2=py39hb9d737c_0
   - pysocks=1.7.1=pyha2e5f31_6
   - pytest=7.2.0=pyhd8ed1ab_2
-  - python=3.9.15=hba424b6_0_cpython
+  - python=3.11
   - python-dateutil=2.8.2=pyhd8ed1ab_0
   - python-fastjsonschema=2.16.2=pyhd8ed1ab_0
   - python-levenshtein=0.20.9=pyhd8ed1ab_0
   - python_abi=3.9=3_cp39
-  - pytorch=1.11.0=py3.9_cuda11.3_cudnn8.2.0_0
+  - pytorch>=2.4
   - pytorch-lightning=1.6.4=pyhd8ed1ab_0
   - pytorch-mutex=1.0=cuda
   - pytz=2022.7=pyhd8ed1ab_0
@@ -305,10 +305,10 @@ dependencies:
   - tk=8.6.12=h27826a3_0
   - tomli=2.0.1=pyhd8ed1ab_0
   - toolz=0.12.0=pyhd8ed1ab_0
-  - torchaudio=0.11.0=py39_cu113
+  - torchaudio>=2.4
   - torchio=0.18.86=pyhd8ed1ab_0
   - torchmetrics=0.11.0=pyhd8ed1ab_0
-  - torchvision=0.12.0=py39_cu113
+  - torchvision>=0.19
   - tornado=6.2=py39hb9d737c_1
   - tqdm=4.64.1=pyhd8ed1ab_0
   - traitlets=5.8.0=pyhd8ed1ab_0

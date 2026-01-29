@@ -128,53 +128,76 @@ def select_model(hparams, train_dataset):
 
 
 def pretrain(hparams, wandb_logger):
-  """
-  Train code for pretraining or supervised models. 
-  
-  IN
-  hparams:      All hyperparameters
-  wandb_logger: Instantiated weights and biases logger
-  """
-  pl.seed_everything(hparams.seed)
+    """
+    Train code for pretraining or supervised models. 
+    
+    IN
+    hparams:       All hyperparameters
+    wandb_logger: Instantiated weights and biases logger
+    """
+    pl.seed_everything(hparams.seed)
 
-  # Load appropriate dataset
-  train_dataset, val_dataset = load_datasets(hparams)
+    # Load appropriate dataset
+    train_dataset, val_dataset = load_datasets(hparams)
 
-  
-  train_loader = DataLoader(
-    train_dataset,
-    num_workers=hparams.num_workers, batch_size=hparams.batch_size,  
-    pin_memory=True, shuffle=True, persistent_workers=True)
+    train_loader = DataLoader(
+        train_dataset,
+        num_workers=hparams.num_workers, batch_size=hparams.batch_size,  
+        pin_memory=True, shuffle=True, persistent_workers=True)
 
-  val_loader = DataLoader(
-    val_dataset,
-    num_workers=hparams.num_workers, batch_size=hparams.batch_size,  
-    pin_memory=True, shuffle=False, persistent_workers=True)
+    val_loader = DataLoader(
+        val_dataset,
+        num_workers=hparams.num_workers, batch_size=hparams.batch_size,  
+        pin_memory=True, shuffle=False, persistent_workers=True)
 
+    print(f"Number of training batches: {len(train_loader)}")
+    print(f"Number of validation batches: {len(val_loader)}")
+    print(f'Valid batch size: {hparams.batch_size*cuda.device_count()}')
 
-  print(f"Number of training batches: {len(train_loader)}")
-  print(f"Number of validation batches: {len(val_loader)}")
-  print(f'Valid batch size: {hparams.batch_size*cuda.device_count()}')
+    # 1. 创建日志目录
+    logdir = create_logdir(hparams.datatype, hparams.resume_training, wandb_logger)
+    
+    model = select_model(hparams, train_dataset)
+    
+    callbacks = []
 
-  # Create logdir based on WandB run name
-  logdir = create_logdir(hparams.datatype, hparams.resume_training, wandb_logger)
-  
-  model = select_model(hparams, train_dataset)
-  
-  callbacks = []
+    if hparams.online_mlp:
+        model.hparams.classifier_freq = float('Inf')
+        z_dim =  hparams.multimodal_embedding_dim if hparams.strategy=='tip' else model.pooled_dim
+        callbacks.append(SSLOnlineEvaluator(z_dim = z_dim, hidden_dim = hparams.embedding_dim, num_classes = hparams.num_classes, swav = False, multimodal = (hparams.datatype=='multimodal'), strategy=hparams.strategy,task=hparams.task))
+    
+    # 2. 将 ModelCheckpoint 实例化为变量，方便后续提取路径
+    ckpt_callback = ModelCheckpoint(
+        filename='checkpoint_last_epoch_{epoch:02d}', 
+        dirpath=logdir, 
+        save_on_train_epoch_end=True, 
+        auto_insert_metric_name=False
+    )
+    callbacks.append(ckpt_callback)
+    callbacks.append(LearningRateMonitor(logging_interval='epoch'))
 
-  if hparams.online_mlp:
-    model.hparams.classifier_freq = float('Inf')
-    z_dim =  hparams.multimodal_embedding_dim if hparams.strategy=='tip' else model.pooled_dim
-    callbacks.append(SSLOnlineEvaluator(z_dim = z_dim, hidden_dim = hparams.embedding_dim, num_classes = hparams.num_classes, swav = False, multimodal = (hparams.datatype=='multimodal'), strategy=hparams.strategy,task=hparams.task))
-  callbacks.append(ModelCheckpoint(filename='checkpoint_last_epoch_{epoch:02d}', dirpath=logdir, save_on_train_epoch_end=True, auto_insert_metric_name=False))
-  callbacks.append(LearningRateMonitor(logging_interval='epoch'))
+    trainer = Trainer.from_argparse_args(
+        hparams, 
+        gpus=cuda.device_count(), 
+        callbacks=callbacks, 
+        logger=wandb_logger, 
+        max_epochs=hparams.max_epochs, 
+        check_val_every_n_epoch=hparams.check_val_every_n_epoch, 
+        limit_train_batches=hparams.limit_train_batches, 
+        limit_val_batches=hparams.limit_val_batches, 
+        enable_progress_bar=hparams.enable_progress_bar
+    )
 
-  trainer = Trainer.from_argparse_args(hparams, gpus=cuda.device_count(), 
-                                       callbacks=callbacks, logger=wandb_logger, max_epochs=hparams.max_epochs, check_val_every_n_epoch=hparams.check_val_every_n_epoch, 
-                                       limit_train_batches=hparams.limit_train_batches, limit_val_batches=hparams.limit_val_batches, enable_progress_bar=hparams.enable_progress_bar)
+    if hparams.resume_training:
+        trainer.fit(model, train_loader, val_loader, ckpt_path=hparams.checkpoint)
+    else:
+        trainer.fit(model, train_loader, val_loader)
 
-  if hparams.resume_training:
-    trainer.fit(model, train_loader, val_loader, ckpt_path=hparams.checkpoint)
-  else:
-    trainer.fit(model, train_loader, val_loader)
+    # 3. 获取并返回路径
+    # best_model_path: 如果你设置了 monitor，这里会是表现最好的模型路径
+    # kpt_callback.last_model_path: 则是最后保存的那个模型路径
+    final_ckpt_path = ckpt_callback.last_model_path
+    
+    print(f"✅ Training finished. Final checkpoint saved at: {final_ckpt_path}")
+    
+    return final_ckpt_path

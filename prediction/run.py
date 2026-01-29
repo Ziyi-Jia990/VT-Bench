@@ -14,16 +14,7 @@ from pytorch_lightning.loggers import WandbLogger
 import wandb
 from pytorch_lightning.loggers import WandbLogger, CSVLogger
 
-from trainers.pretrain import pretrain
-from trainers.evaluate import evaluate
-from trainers.test import test
 from utils.utils import grab_arg_from_checkpoint, prepend_paths, re_prepend_paths
-
-
-from unimodal.eval_tabpfn import run_tabpfn_experiment
-from unimodal.LightGBM import run_lgb_experiment
-from unimodal.transformer import run_ftt_experiment
-from unimodal.vit import run_vit_experiment
 
 PREDICTION_SRC = os.path.join(os.path.dirname(__file__), "src")
 if PREDICTION_SRC not in sys.path:
@@ -40,6 +31,9 @@ hydra.HYDRA_FULL_ERROR = 1
 
 #@hydra.main(config_path='./configs', config_name='config', version_base=None)
 def run(args: DictConfig):
+  from trainers.pretrain import pretrain
+  from trainers.evaluate import evaluate
+  from trainers.test import test
   now = datetime.now()
   start = time.time()
   pl.seed_everything(args.seed)
@@ -116,8 +110,7 @@ def run(args: DictConfig):
     print(f'Target is {args.target}')
     print('=================================================================================')
     torch.cuda.empty_cache()
-    pretrain(args, wandb_logger)
-    args.checkpoint = os.path.join(base_dir, 'runs', args.datatype, args.exp_name, f'checkpoint_last_epoch_{args.max_epochs-1:02}.ckpt')
+    args.checkpoint = pretrain(args, wandb_logger)
   
   if args.test:
     test(args, wandb_logger)
@@ -157,7 +150,7 @@ def control(args: DictConfig):
 #         checkpoints = run(cfg)
 #         return checkpoints
 
-def call_with_specific_config(config_name, model_id):
+def call_with_specific_config(config_name, model_id, diagnosis="full"):
     """
     Dispatches the experiment to the correct model handler based on model_id.
     Standardizes config names into either 'config_{dataset}_image' or 'config_{dataset}_Tabular'.
@@ -173,7 +166,7 @@ def call_with_specific_config(config_name, model_id):
     dataset_name = parts[1]
 
     # 2. Determine the target config file name based on model_id
-    if model_id == 'vit':
+    if model_id in ['vit', 'resnet']:
         target_config = f"config_{dataset_name}_image"
     elif model_id in ['tabtransformer', 'tabpfn', 'lightgbm']:
         target_config = f"config_{dataset_name}_Tabular"
@@ -183,7 +176,7 @@ def call_with_specific_config(config_name, model_id):
     ]:
         target_config = None
     else:
-        raise ValueError(f"Unsupported model_id: {model_id}")
+        target_config = config_name
 
     print(f"[*] Dispatching task | Model: {model_id} | Dataset: {dataset_name}")
     if target_config:
@@ -202,18 +195,22 @@ def call_with_specific_config(config_name, model_id):
 
     if model_id == 'vit':
         # Result filename will be vit_results_{target}.txt
+        from unimodal.vit import run_vit_experiment
         checkpoints = run_vit_experiment(cfg)
         
     elif model_id == 'tabpfn':
         # Result will be saved to result/tabpfn_results.json
+        from unimodal.eval_tabpfn import run_tabpfn_experiment
         checkpoints = run_tabpfn_experiment(cfg)
         
     elif model_id == 'lightgbm':
         # Result will be lgb_results_{dataset}.txt
+        from unimodal.LightGBM import run_lgb_experiment
         checkpoints = run_lgb_experiment(cfg)
         
     elif model_id == 'tabtransformer':
         # Result will be result/fttrans.txt
+        from unimodal.transformer import run_ftt_experiment
         checkpoints = run_ftt_experiment(cfg)
 
     elif model_id in [
@@ -227,7 +224,8 @@ def call_with_specific_config(config_name, model_id):
         )
         output_dirs = result.get("output_dirs", [])
         checkpoints = output_dirs[0] if output_dirs else None
-
+    else:
+       checkpoints = run(cfg)
     return checkpoints        
 
 if __name__ == "__main__":

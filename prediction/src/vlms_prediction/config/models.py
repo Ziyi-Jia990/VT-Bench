@@ -1,7 +1,7 @@
 # 模型配置映射
 # 将简短的模型名称映射到完整的模型配置
 
-from typing import TypedDict, Optional
+from typing import TypedDict, Optional, Union, List
 
 
 class ModelConfig(TypedDict):
@@ -14,7 +14,7 @@ class ModelConfig(TypedDict):
     lora_rank: int               # LoRA rank
     lora_alpha: int              # LoRA alpha
     lora_dropout: float          # LoRA dropout
-    lora_target: str | list      # LoRA 目标层
+    lora_target: Union[str, List[str]]  # LoRA 目标层
     cutoff_len: int              # 序列最大长度
     description: str             # 模型描述
 

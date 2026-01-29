@@ -3,7 +3,7 @@ import numpy as np
 import os
 from tqdm import tqdm
 
-# ================= 配置区域 =================
+# ================= Configuration Area =================
 CONFIG = {
     "MIMIC_IV_HOSP": "../physionet.org/files/mimiciv/2.2/hosp",
     "MIMIC_IV_ICU": "../physionet.org/files/mimiciv/2.2/icu",
@@ -12,12 +12,12 @@ CONFIG = {
     "TARGET_COUNT": 100000,
 }
 
-# 定义要提取的临床特征
+# Define clinical features to extract
 FEATURES_CONFIG = {
     'chartevents': {
         'Temperature': [223761, 223762], 
         'HeartRate': [220045],
-        'RespRate': [220210], # 注意：RR任务中需要排除此特征
+        'RespRate': [220210], # Note: This feature needs to be excluded in RR task
         'SpO2': [220277],
         'SysBP': [220179, 220050], 
         'DiaBP': [220180, 220051],
@@ -72,25 +72,25 @@ def split_data(df):
 
 def extract_clinical_features(df_cohort, exclude_features=None, lookback_hours=24):
     """
-    通用特征提取函数
-    exclude_features: list of str, 需要排除的特征名 (例如 RR 预测任务中排除 RespRate)
+    Generic feature extraction function
+    exclude_features: list of str, feature names to exclude (e.g., exclude RespRate in RR prediction task)
     """
     print(f"    Extracting Clinical Features (Window: +/- {lookback_hours} hours)...")
     valid_hadms = set(df_cohort['hadm_id'].unique())
     
-    # 准备 ItemID 列表
+    # Prepare ItemID lists
     target_chart_ids = []
     target_lab_ids = []
     item_map = {}
 
-    # 解析 Chartevents 配置
+    # Parse Chartevents configuration
     for name, ids in FEATURES_CONFIG['chartevents'].items():
         if exclude_features and name in exclude_features:
             continue
         target_chart_ids.extend(ids)
         for i in ids: item_map[i] = name
             
-    # 解析 Labevents 配置
+    # Parse Labevents configuration
     for name, ids in FEATURES_CONFIG['labevents'].items():
         if exclude_features and name in exclude_features:
             continue
@@ -104,7 +104,7 @@ def extract_clinical_features(df_cohort, exclude_features=None, lookback_hours=2
     chart_path = get_file_path(CONFIG["MIMIC_IV_ICU"], "chartevents.csv")
     chunk_size = 5000000
     
-    # 无 with 写法，兼容旧 Pandas
+    # No with syntax, compatible with older Pandas
     reader = pd.read_csv(chart_path, chunksize=chunk_size, usecols=['hadm_id', 'itemid', 'charttime', 'valuenum'])
     
     for chunk in tqdm(reader, desc="    Reading Vitals"):
@@ -112,7 +112,7 @@ def extract_clinical_features(df_cohort, exclude_features=None, lookback_hours=2
         chunk = chunk[chunk['itemid'].isin(target_chart_ids)]
         chunk = chunk.dropna(subset=['valuenum'])
         
-        # 温度转换 F -> C
+        # Temperature conversion F -> C
         if 223761 in chunk['itemid'].values:
             f_mask = chunk['itemid'] == 223761
             chunk.loc[f_mask, 'valuenum'] = (chunk.loc[f_mask, 'valuenum'] - 32) * 5/9
@@ -157,7 +157,7 @@ def extract_clinical_features(df_cohort, exclude_features=None, lookback_hours=2
     return df_final
 
 def step_1_link_cxr_to_hadm():
-    """Step 1: 全量对齐 (无限制)"""
+    """Step 1: Full-scale alignment (no limit)"""
     print(">>> Step 1: Aligning CXR to Admissions (Full Scale)...")
     
     cxr_meta_path = get_file_path(CONFIG["MIMIC_CXR"], "mimic-cxr-2.0.0-metadata.csv")
@@ -165,7 +165,7 @@ def step_1_link_cxr_to_hadm():
     df_cxr.rename(columns={'dicom_id': 'image_id'}, inplace=True)
     df_cxr = df_cxr[df_cxr['ViewPosition'].isin(['AP', 'PA'])]
     
-    # 全量数据处理
+    # Full-scale data processing
     print(f"    Loaded {len(df_cxr)} CXR studies candidates.")
 
     df_cxr['studydatetime'] = pd.to_datetime(
@@ -193,7 +193,7 @@ def step_1_link_cxr_to_hadm():
     return aligned[['subject_id', 'study_id', 'image_id', 'hadm_id', 'studydatetime', 'ViewPosition']]
 
 def step_2_build_los_dataset(df_aligned):
-    """任务 1: LOS 预测 (含丰富特征)"""
+    """Task 1: LOS prediction (with rich features)"""
     print("\n>>> Step 2: Building LOS Dataset (Enriched)...")
     
     adm_path = get_file_path(CONFIG["MIMIC_IV_HOSP"], "admissions.csv")
@@ -214,20 +214,20 @@ def step_2_build_los_dataset(df_aligned):
     df_final = df_final[df_final['target_los_days'] > 0]
     df_final = df_final[(df_final['studydatetime'] >= df_final['admittime']) & (df_final['studydatetime'] <= df_final['dischtime'])]
 
-    # 【新增】特征提取 (LOS 任务可以包含所有特征，包括呼吸频率)
+    # [New] Feature extraction (LOS task can include all features, including respiratory rate)
     df_final = extract_clinical_features(df_final, lookback_hours=24)
     
-    # 清洗缺失值
+    # Clean missing values
     print("    Filtering missing values...")
     feature_cols = list(FEATURES_CONFIG['chartevents'].keys()) + list(FEATURES_CONFIG['labevents'].keys())
-    # 确保列存在
+    # Ensure columns exist
     feature_cols = [c for c in feature_cols if c in df_final.columns]
     
     initial_len = len(df_final)
     df_final = df_final.dropna(subset=feature_cols, how='any')
     print(f"    Dropped {initial_len - len(df_final)} rows. Remaining: {len(df_final)}")
     
-    # 截断
+    # Truncate
     if len(df_final) > CONFIG["TARGET_COUNT"]:
         df_final = df_final.sample(n=CONFIG["TARGET_COUNT"], random_state=42).reset_index(drop=True)
         
@@ -243,10 +243,10 @@ def step_2_build_los_dataset(df_aligned):
     print(f"    -> Saved: {save_path}")
 
 def step_3_build_rr_dataset(df_aligned):
-    """任务 2: 呼吸频率预测 (含丰富特征)"""
+    """Task 2: Respiratory rate prediction (with rich features)"""
     print("\n>>> Step 3: Building RR Dataset (Enriched)...")
     
-    # 1. 构建 Target (呼吸频率)
+    # 1. Build Target (respiratory rate)
     chart_path = get_file_path(CONFIG["MIMIC_IV_ICU"], "chartevents.csv")
     valid_hadms = set(df_aligned['hadm_id'].unique())
     
@@ -256,8 +256,8 @@ def step_3_build_rr_dataset(df_aligned):
     
     reader = pd.read_csv(chart_path, chunksize=chunk_size, usecols=['hadm_id', 'itemid', 'charttime', 'valuenum'])
     
-    # 为了保证质量，这里建议尽量多读一些 Target，或者读全量
-    # 这里我们设定只要扫到足够多的 raw records 就停止，或者你可以去掉 break 跑全量
+    # To ensure quality, it's recommended to read as many Targets as possible, or read full-scale
+    # Here we set to stop once enough raw records are scanned, or you can remove break to run full-scale
     total_found_raw = 0
     for chunk in tqdm(reader, desc="Scanning Targets"):
         chunk_filtered = chunk[
@@ -269,7 +269,7 @@ def step_3_build_rr_dataset(df_aligned):
             rr_records.append(chunk_filtered)
             total_found_raw += len(chunk_filtered)
             
-        # 如果 raw records 超过 200万条，通常足够生成 >10万 的 aggregated samples
+        # If raw records exceed 2 million, usually sufficient to generate >100k aggregated samples
         if total_found_raw > CONFIG["TARGET_COUNT"] * 20: 
             print("    Found sufficient raw targets, proceeding...")
             break
@@ -290,14 +290,14 @@ def step_3_build_rr_dataset(df_aligned):
     
     print(f"    Target candidates found: {len(df_target)}")
 
-    # 2. 【新增】提取特征
-    # 关键：预测呼吸频率时，输入特征里不能包含呼吸频率！
+    # 2. [New] Extract features
+    # Key: When predicting respiratory rate, input features must not include respiratory rate!
     # exclude_features=['RespRate']
     df_target = extract_clinical_features(df_target, exclude_features=['RespRate'], lookback_hours=24)
     
-    # 3. 清洗
+    # 3. Clean
     print("    Filtering missing values...")
-    # 获取特征列表 (注意排除了 RespRate)
+    # Get feature list (note RespRate is excluded)
     feature_cols = list(FEATURES_CONFIG['chartevents'].keys()) + list(FEATURES_CONFIG['labevents'].keys())
     feature_cols = [c for c in feature_cols if c != 'RespRate' and c in df_target.columns]
     
@@ -305,14 +305,14 @@ def step_3_build_rr_dataset(df_aligned):
     df_target = df_target.dropna(subset=feature_cols, how='any')
     print(f"    Dropped {initial_len - len(df_target)} rows. Remaining: {len(df_target)}")
     
-    # 补充基础信息
+    # Add basic information
     pat_path = get_file_path(CONFIG["MIMIC_IV_HOSP"], "patients.csv")
     df_pat = pd.read_csv(pat_path, usecols=['subject_id', 'gender', 'anchor_age', 'anchor_year'])
     df_final = pd.merge(df_target, df_pat, on='subject_id', how='inner')
     df_final['admit_year'] = df_final['studydatetime'].dt.year
     df_final['age'] = df_final['anchor_age'] + (df_final['admit_year'] - df_final['anchor_year'])
     
-    # 截断
+    # Truncate
     if len(df_final) > CONFIG["TARGET_COUNT"]:
         df_final = df_final.sample(n=CONFIG["TARGET_COUNT"], random_state=42).reset_index(drop=True)
         
@@ -327,13 +327,13 @@ def step_3_build_rr_dataset(df_aligned):
     print(f"    -> Saved: {save_path}")
 
 if __name__ == "__main__":
-    # 1. 必须先运行这个获取全量对齐数据
+    # 1. Must run this first to get full-scale aligned data
     df_aligned = step_1_link_cxr_to_hadm()
     
-    # 2. 生成 LOS 数据集
+    # 2. Generate LOS dataset
     step_2_build_los_dataset(df_aligned)
     
-    # 3. 生成 RR 数据集
+    # 3. Generate RR dataset
     step_3_build_rr_dataset(df_aligned)
     
     print("\nRegression dataset construction complete!")
