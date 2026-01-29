@@ -44,6 +44,12 @@ conda env create --file environment_vlm.yaml
 conda activate vt_bench_vlm
 ```
 
+Additionally, you need to download LLaMA-Factory:
+
+```bash
+git clone https://github.com/hiyouga/LLaMA-Factory.git
+```
+
 ### 3) Run Evaluation
 
 You need to specify **five arguments**: `task`, `dataset`, `model`, `setting`, and `diagnostics`.
@@ -155,7 +161,7 @@ Example:
 
 
 
-## How to Add New Datasets
+### How to Add New Datasets
 
 To integrate a new dataset, please provide a custom script that follows VT-Bench’s standard preprocessing pipeline:
 
@@ -235,7 +241,7 @@ VT-Bench supports comprehensive evaluation of vision-tabular multi-modal learnin
 
 
 
-## How to Add New Models
+### How to Add New Models
 
 * For **generative reasoning**, add the Hugging Face / API calling logic in the corresponding evaluator scripts for each reasoning dataset.
 * For **discriminative prediction**, add a new model function under `prediction/models/`.
@@ -251,6 +257,7 @@ We would like to thank the following repositories for their great works:
 - [CHARMS](https://github.com/LAMDA-Tabular/CHARMS.git)
 - [EHRXQA](https://github.com/baeseongsu/ehrxqa.git)
 - [MMQA](https://allenai.github.io/multimodalqa/)
+- [LLaMA-Factoy](https://github.com/hiyouga/LLaMA-Factory.git)
 
 
 
