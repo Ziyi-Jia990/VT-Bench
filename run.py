@@ -3,14 +3,15 @@ import sys
 import os
 # 获取 run.py 所在的根目录
 root_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(root_dir)
+sys.path.insert(0, root_dir)  # 使用 insert 确保优先级
 
 # 获取 prediction 文件夹的路径并加入 sys.path
 prediction_dir = os.path.join(root_dir, 'prediction')
-sys.path.append(prediction_dir)
+sys.path.insert(0, prediction_dir)  # 使用 insert 确保优先级
 
-prediction_dir = os.path.join(root_dir, 'reasoning')
-sys.path.append(prediction_dir)
+# 获取 reasoning 文件夹的路径并加入 sys.path
+reasoning_dir = os.path.join(root_dir, 'reasoning')
+sys.path.insert(0, reasoning_dir)  # 使用 insert 确保优先级
 
 # Imports are done lazily inside the task branches to avoid
 # loading unnecessary dependencies for the chosen task.

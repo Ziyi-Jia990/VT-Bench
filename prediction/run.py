@@ -16,6 +16,11 @@ from pytorch_lightning.loggers import WandbLogger, CSVLogger
 
 from utils.utils import grab_arg_from_checkpoint, prepend_paths, re_prepend_paths
 
+# Ensure the prediction directory is in sys.path for relative imports
+PREDICTION_DIR = os.path.dirname(os.path.abspath(__file__))
+if PREDICTION_DIR not in sys.path:
+    sys.path.insert(0, PREDICTION_DIR)
+
 PREDICTION_SRC = os.path.join(os.path.dirname(__file__), "src")
 if PREDICTION_SRC not in sys.path:
   sys.path.insert(0, PREDICTION_SRC)

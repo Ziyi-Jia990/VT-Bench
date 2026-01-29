@@ -7,11 +7,17 @@ import numpy as np
 from tqdm import tqdm
 import warnings
 import os
+import sys
 from argparse import Namespace
 from collections import OrderedDict
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import pytorch_lightning as pl
+
+# Ensure the prediction directory is in sys.path for imports
+_prediction_dir = os.path.dirname(os.path.abspath(__file__))
+if _prediction_dir not in sys.path:
+    sys.path.insert(0, _prediction_dir)
 
 # --- Import your models and Datasets ---
 from datasets.ImagingAndTabularDataset import ImagingAndTabularDataset
